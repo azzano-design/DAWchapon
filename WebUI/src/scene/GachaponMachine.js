@@ -93,7 +93,7 @@ function makeBadgeTexture() {
     ctx.font = "bold 46px -apple-system, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("DAWTCHAPON", w / 2, h / 2);
+    ctx.fillText("DAWCHAPON", w / 2, h / 2);
   }, 512, 160);
 }
 

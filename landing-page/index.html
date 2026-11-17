@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DAWchapon — A gachapon machine for your audio</title>
+    <meta
+      name="description"
+      content="DAWchapon is a macOS audio plugin that turns a spin of an animated gachapon machine into a random audio effect — with rare metallic Silver and Gold pulls."
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <!-- Pinned to the exact versions WebUI/package.json uses, since the hero
+         and toy icons below import WebUI's own scene code directly (see
+         js/vendor/) and need to resolve the same bare specifiers it does. -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header class="topnav">
+      <div class="topnav-inner">
+        <span class="topnav-logo">DAWchapon</span>
+        <nav class="topnav-links">
+          <a href="#demo">Demo</a>
+          <a href="#toys">The Toys</a>
+          <a href="#rares">Rares</a>
+          <a href="#install">Install</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <!-- ============ HERO ============ -->
+      <section class="hero">
+        <div class="hero-copy">
+          <h1>DAWchapon</h1>
+          <button id="try-now" class="cta-button" type="button">Try now</button>
+        </div>
+
+        <!-- The real gachapon machine (see js/vendor/GachaponMachine.js),
+             inlined directly rather than through an iframe so it can run
+             full width. #hero-lock blocks interaction with it until "Try
+             now" is clicked (see main.js), rather than gating it behind a
+             separate on/off visual state. -->
+        <div class="hero-scene">
+          <div id="scene-container" class="scene-container"></div>
+          <div id="gold-glow" class="gold-glow"></div>
+          <div id="hero-lock" class="hero-lock" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <!-- ============ LIVE AUDIO DEMO ============ -->
+      <section id="demo" class="section demo-section" data-reveal>
+        <h2>Hear it for yourself</h2>
+        <p class="section-sub">
+          Hit play, then turn the knob on the machine above — whichever toy pops out swaps in its effect on the
+          track below, picking up exactly where the playhead left off.
+        </p>
+
+        <div class="player">
+          <button id="player-play" class="player-play" type="button" aria-label="Play or pause">
+            <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            <svg class="icon-pause" viewBox="0 0 24 24">
+              <rect x="6" y="5" width="4" height="14" />
+              <rect x="14" y="5" width="4" height="14" />
+            </svg>
+          </button>
+
+          <div class="player-body">
+            <div id="player-now-playing" class="player-now-playing">Now playing: Original Sound</div>
+            <div id="player-progress" class="player-progress">
+              <div id="player-progress-fill" class="player-progress-fill"></div>
+            </div>
+            <div class="player-times">
+              <span id="player-current-time">0:00</span>
+              <span id="player-duration">0:00</span>
+            </div>
+          </div>
+        </div>
+
+        <audio id="demo-audio" src="assets/dawchapon-test.mp3" preload="metadata" loop></audio>
+      </section>
+
+      <!-- ============ TOY COMPARISON ============ -->
+      <section id="toys" class="section toys-section" data-reveal>
+        <h2>Five toys. Five effects.</h2>
+        <p class="section-sub">Every spin of the machine picks one at random — and secretly sets your effect.</p>
+        <p class="hint-note">
+          The highlighted card always shows whichever toy is currently running — turn the knob above to change it.
+        </p>
+        <div id="toy-grid" class="toy-grid"></div>
+      </section>
+
+      <!-- ============ RARE VARIANTS ============ -->
+      <section id="rares" class="section rares-section" data-reveal>
+        <h2>Some pulls are rarer than others</h2>
+        <p class="section-sub">
+          Every toy also comes in two rare metallic finishes — same character, pushed further. Here's Robo-Pal in
+          all three.
+        </p>
+
+        <div id="rare-grid" class="rare-grid"></div>
+      </section>
+
+      <!-- ============ INSTALL ============ -->
+      <section id="install" class="section install-section" data-reveal>
+        <h2>How to install</h2>
+
+        <video
+          class="install-video"
+          src="assets/video/dawchapon-install.mp4"
+          autoplay
+          muted
+          loop
+          playsinline
+          aria-hidden="true"
+        ></video>
+
+        <ol class="install-steps">
+          <li>
+            Go to the
+            <a href="https://github.com/azzano-design/DAWtchapon" target="_blank" rel="noopener">DAWchapon GitHub page</a>
+            and download the latest release from the Releases tab.
+          </li>
+          <li>Unzip the download, then move <code>DAWchapon.component</code> into <code>~/Library/Audio/Plug-Ins/Components/</code>.</li>
+          <li>
+            If macOS blocks it as coming from an unidentified developer, open Terminal and run:
+            <pre><code>xattr -cr ~/Library/Audio/Plug-Ins/Components/DAWchapon.component</code></pre>
+          </li>
+          <li>Quit and reopen GarageBand so it rescans for new Audio Units.</li>
+          <li>
+            On any track, open the <strong>Plug-ins</strong> list in Smart Controls and add an Audio Unit under
+            manufacturer <strong>Bazz</strong> → <strong>DAWchapon</strong>.
+          </li>
+          <li>
+            Click the plugin's power button to switch it on, then crank the gachapon machine — whichever toy pops
+            out decides your effect, until you spin again.
+          </li>
+        </ol>
+
+        <div class="download-cta">
+          <a class="cta-button cta-button--large" href="https://github.com/azzano-design/DAWtchapon/releases/latest" target="_blank" rel="noopener">
+            Download for macOS
+          </a>
+          <p class="placeholder-note">Placeholder link — points at the repo's Releases page, which doesn't have a build yet.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>DAWchapon — a tiny gachapon machine living inside your DAW.</p>
+      <p class="footnote">Demo track created using Apple Loops in GarageBand.</p>
+    </footer>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>

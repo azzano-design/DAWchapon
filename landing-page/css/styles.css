@@ -1,0 +1,555 @@
+:root {
+  --bg: #000000;
+  --bg-elevated: #111113;
+  --bg-card: #1a1a1d;
+  --text: #f5f5f7;
+  --text-dim: #a1a1a6;
+  --border: rgba(255, 255, 255, 0.12);
+  --accent: #2997ff;
+  --radius-lg: 28px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --font: -apple-system, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* Keeps the fixed .topnav (~60px) from covering whatever gets scrolled
+     to — by anchor links, or any scrollIntoView-style call — right at the
+     top edge of the viewport. */
+  scroll-padding-top: 70px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+p {
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+code {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  background: var(--bg-card);
+  padding: 0.15em 0.45em;
+  border-radius: 6px;
+  font-size: 0.92em;
+}
+
+pre {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 18px;
+  overflow-x: auto;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+/* ---------- Top nav ---------- */
+
+.topnav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  backdrop-filter: saturate(180%) blur(20px);
+  background: rgba(0, 0, 0, 0.72);
+  border-bottom: 1px solid var(--border);
+}
+
+.topnav-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+}
+
+.topnav-logo {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.topnav-links {
+  display: flex;
+  gap: 28px;
+  font-size: 13px;
+}
+
+.topnav-links a {
+  text-decoration: none;
+  color: var(--text-dim);
+  transition: color 0.2s ease;
+}
+
+.topnav-links a:hover {
+  color: var(--text);
+}
+
+/* ---------- Hero ---------- */
+
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 48px;
+  padding-top: 140px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 0%, #1c1c1f 0%, #000000 65%);
+  transition: padding-top 0.6s ease, gap 0.6s ease;
+}
+
+/* Once revealed, the headline/CTA fade to zero height (see .hero-copy
+   below) but .hero's own top padding and flex gap are separate box-model
+   space that collapsing a child to 0 height doesn't remove on its own —
+   without this, the scene would still sit ~190px below the nav with
+   nothing visible left to justify it. 47px matches .topnav's own
+   rendered height, so the scene ends up flush against it, not under it. */
+.hero.is-revealed {
+  padding-top: 47px;
+  gap: 0;
+}
+
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 0 24px;
+  transition: opacity 0.6s ease, transform 0.6s ease, max-height 0.6s ease, margin 0.6s ease;
+  max-height: 300px;
+}
+
+.hero.is-revealed .hero-copy {
+  opacity: 0;
+  transform: translateY(-16px);
+  max-height: 0;
+  margin: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hero h1 {
+  font-size: clamp(48px, 9vw, 96px);
+  line-height: 1.02;
+  background: linear-gradient(180deg, #fff 0%, #a7a7ad 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.cta-button {
+  appearance: none;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 500;
+  padding: 14px 32px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.cta-button:hover {
+  background: #52a9ff;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(41, 151, 255, 0.35);
+}
+
+.cta-button--large {
+  font-size: 19px;
+  padding: 16px 40px;
+}
+
+/* ---------- Hero scene (the real gachapon machine, inlined) ---------- */
+
+.hero-scene {
+  position: relative;
+  /* Full-bleed: escapes .hero's centered/padded flex layout to span the
+     whole viewport width regardless of any ancestor's padding or
+     max-width, rather than being boxed into a device-chrome card. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  height: min(80vh, 760px);
+  overflow: hidden;
+  background: #15151a;
+}
+
+.scene-container {
+  position: absolute;
+  inset: 0;
+}
+
+.gold-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 55%, rgba(255, 211, 107, 0.35), rgba(255, 211, 107, 0) 55%);
+  transition: opacity 0.4s ease;
+}
+
+.gold-glow.active {
+  opacity: 0.6;
+}
+
+/* Blocks clicks/drags on the machine (so the knob can't be turned) until
+   "Try now" is clicked — see main.js. Opacity and pointer-events toggle
+   together via .hidden, so interaction is enabled the instant the class
+   is added rather than only once the fade transition finishes. */
+.hero-lock {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  transition: opacity 0.6s ease;
+}
+
+.hero-lock.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- Generic section layout ---------- */
+
+.section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 120px 24px;
+  text-align: center;
+}
+
+.section h2 {
+  font-size: clamp(32px, 5vw, 52px);
+  margin-bottom: 18px;
+}
+
+.section-sub {
+  max-width: 640px;
+  margin: 0 auto 56px;
+  font-size: 18px;
+}
+
+/* Scoped to #toys specifically, not the base rule above — the other
+   sections' own spacing after their section-sub is unrelated to this. */
+#toys .section-sub {
+  margin-bottom: 0;
+}
+
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+[data-reveal].is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---------- Audio demo player ---------- */
+
+.player {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px 28px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.player-play {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--text);
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.player-play svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.player-play .icon-pause {
+  display: none;
+}
+
+.player-play.is-playing .icon-play {
+  display: none;
+}
+
+.player-play.is-playing .icon-pause {
+  display: block;
+}
+
+.player-body {
+  flex: 1;
+  text-align: left;
+}
+
+.player-now-playing {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.player-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.player-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+.player-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
+.placeholder-note {
+  font-size: 13px;
+  color: #6e6e73;
+  margin-top: 24px;
+}
+
+.hint-note {
+  font-size: 13px;
+  color: #6e6e73;
+  margin: 0 0 56px;
+}
+
+/* ---------- Toy comparison grid ---------- */
+
+.toy-grid {
+  /* Flex instead of grid specifically so 5 cards wrap as a centered 3-then-2
+     (grid would left-align the leftover 2 under the first two columns,
+     leaving a lopsided gap on the right). The width range below is tuned
+     against .section's 1100px max-width to land on exactly 3 per row at
+     that width, not 2 or 4. */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  text-align: left;
+}
+
+.toy-card {
+  flex: 1 1 300px;
+  max-width: 340px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text);
+  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+  text-align: left;
+}
+
+.toy-card.is-active {
+  border-color: var(--toy-color);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), var(--bg-card));
+  box-shadow: 0 0 0 1px var(--toy-color), 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.toy-card-icon {
+  width: 88px;
+  height: 88px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.06), transparent 70%);
+}
+
+.toy-card-icon canvas {
+  display: block;
+}
+
+.toy-card-name {
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.toy-card-tagline {
+  font-size: 13px;
+  color: var(--toy-color);
+  font-weight: 500;
+}
+
+.toy-card-description {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* ---------- Rare variants ---------- */
+
+.rare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.rare-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.rare-card--gold {
+  border-color: rgba(245, 212, 121, 0.4);
+  box-shadow: 0 0 40px rgba(245, 212, 121, 0.08);
+}
+
+.rare-card-icon {
+  width: 96px;
+  height: 96px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.06), transparent 70%);
+}
+
+.rare-card-icon canvas {
+  display: block;
+}
+
+.rare-odds {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+/* ---------- Install ---------- */
+
+.install-video {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto 56px;
+  /* Matches assets/video/dawchapon-install.mp4's own 1780x926 — same slot
+     the placeholder occupied, just sized to the real video's aspect
+     instead of an arbitrary placeholder one, so nothing's cropped or
+     letterboxed. */
+  aspect-ratio: 1780 / 926;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  object-fit: cover;
+}
+
+.install-steps {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: left;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1.7;
+  padding-left: 24px;
+}
+
+.install-steps li {
+  margin-bottom: 18px;
+}
+
+.install-steps a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.install-steps pre {
+  margin-top: 10px;
+  text-align: left;
+}
+
+.download-cta {
+  margin-top: 56px;
+}
+
+/* ---------- Footer ---------- */
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding: 32px 24px 48px;
+  text-align: center;
+  font-size: 13px;
+  color: #6e6e73;
+}
+
+.site-footer .footnote {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #5a5a5e;
+}
+
+@media (max-width: 600px) {
+  .player {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .player-body {
+    text-align: center;
+  }
+}

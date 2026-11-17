@@ -10,7 +10,7 @@
 class ToyRegistryTests : public juce::UnitTest
 {
 public:
-    ToyRegistryTests() : juce::UnitTest ("ToyRegistry", "DAWtchapon") {}
+    ToyRegistryTests() : juce::UnitTest ("ToyRegistry", "DAWchapon") {}
 
     void runTest() override
     {
@@ -25,16 +25,16 @@ public:
             expectEquals ((int) names.size(), ToyRegistry::numToys);
         }
 
-        beginTest ("each toy's DSP runs cleanly on a test signal without NaN/Inf");
+        beginTest ("every toy+variant combo's DSP runs cleanly on a test signal without NaN/Inf");
         {
             constexpr double sampleRate = 44100.0;
             constexpr int blockSize = 512;
 
             juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) blockSize, 2 };
 
-            for (auto& toyInfo : ToyRegistry::getToys())
+            for (int combo = 0; combo < ToyRegistry::numCombos; ++combo)
             {
-                auto dsp = toyInfo.create();
+                auto dsp = ToyRegistry::createForCombo (combo);
                 dsp->prepare (spec);
 
                 juce::AudioBuffer<float> buffer (2, blockSize);
@@ -48,6 +48,7 @@ public:
                 juce::dsp::AudioBlock<float> block (buffer);
                 dsp->process (block);
 
+                const auto& toyInfo = ToyRegistry::getToys()[(size_t) ToyRegistry::toyIndexOfCombo (combo)];
                 for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
                 {
                     auto* data = buffer.getReadPointer (ch);
@@ -64,13 +65,13 @@ static ToyRegistryTests toyRegistryTests;
 class ProcessorStateTests : public juce::UnitTest
 {
 public:
-    ProcessorStateTests() : juce::UnitTest ("ProcessorState", "DAWtchapon") {}
+    ProcessorStateTests() : juce::UnitTest ("ProcessorState", "DAWchapon") {}
 
     void runTest() override
     {
         beginTest ("activeToyIndex round-trips through state save/restore");
         {
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (44100.0, 512);
 
             processor.requestSpin();
@@ -80,7 +81,7 @@ public:
             juce::MemoryBlock state;
             processor.getStateInformation (state);
 
-            DAWtchaponAudioProcessor restored;
+            DAWchaponAudioProcessor restored;
             restored.prepareToPlay (44100.0, 512);
             restored.setStateInformation (state.getData(), (int) state.getSize());
 
@@ -89,7 +90,7 @@ public:
 
         beginTest ("spin never re-selects the currently active toy, once confirmed");
         {
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (44100.0, 512);
 
             for (int i = 0; i < 50; ++i)
@@ -103,9 +104,32 @@ public:
             }
         }
 
+        beginTest ("spin never re-selects the toy from either of the last two confirmed pulls");
+        {
+            DAWchaponAudioProcessor processor;
+            processor.prepareToPlay (44100.0, 512);
+
+            int previousToy = -1;
+            int currentToy = ToyRegistry::toyIndexOfCombo (processor.getActiveToyIndex());
+
+            for (int i = 0; i < 50; ++i)
+            {
+                const auto newCombo = processor.requestSpin();
+                const auto newToy = ToyRegistry::toyIndexOfCombo (newCombo);
+
+                expect (newToy != currentToy, "Spin re-selected the currently active toy");
+                expect (previousToy < 0 || newToy != previousToy,
+                    "Spin re-selected the toy from two pulls ago");
+
+                processor.confirmPendingSpin();
+                previousToy = currentToy;
+                currentToy = newToy;
+            }
+        }
+
         beginTest ("requestSpin doesn't change the active toy until confirmPendingSpin is called");
         {
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (44100.0, 512);
 
             const auto before = processor.getActiveToyIndex();
@@ -124,7 +148,7 @@ public:
             constexpr double sampleRate = 44100.0;
             constexpr int blockSize = 512;
 
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (sampleRate, blockSize);
 
             const auto chosen = processor.requestSpin();
@@ -159,7 +183,7 @@ public:
 
         beginTest ("hasRevealedToy starts false and persists across save/restore once set");
         {
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (44100.0, 512);
 
             expect (! processor.hasRevealedToy(), "hasRevealedToy should start false on a fresh instance");
@@ -171,7 +195,7 @@ public:
             juce::MemoryBlock state;
             processor.getStateInformation (state);
 
-            DAWtchaponAudioProcessor restored;
+            DAWchaponAudioProcessor restored;
             restored.prepareToPlay (44100.0, 512);
             expect (! restored.hasRevealedToy(), "a fresh instance shouldn't already have hasRevealedToy true");
 
@@ -184,7 +208,7 @@ public:
             constexpr double sampleRate = 44100.0;
             constexpr int blockSize = 512;
 
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (sampleRate, blockSize);
 
             expect (! processor.hasRevealedToy(), "a fresh instance shouldn't have revealed a toy yet");
@@ -251,7 +275,7 @@ public:
 
         beginTest ("isPluginActive reflects whichever process method was last called");
         {
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (44100.0, 512);
 
             expect (processor.isPluginActive(), "should start active (not bypassed)");
@@ -266,6 +290,31 @@ public:
             expect (processor.isPluginActive(), "should report active again after processBlock()");
         }
 
+        beginTest ("isRenderStalled becomes true once process calls actually stop, and resets once they resume");
+        {
+            // Covers the host that doesn't go through either of
+            // isPluginActive()'s own two signals at all for its bypass
+            // control (confirmed with GarageBand's per-plugin power
+            // button) — it just stops calling any process method
+            // whatsoever, so this has to notice that absence directly.
+            DAWchaponAudioProcessor processor;
+            processor.prepareToPlay (44100.0, 512);
+
+            expect (! processor.isRenderStalled(), "shouldn't be stalled immediately after construction");
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+            processor.processBlock (buffer, midi);
+            expect (! processor.isRenderStalled(), "shouldn't be stalled right after a process call");
+
+            // Comfortably past renderStallThresholdMs (300ms).
+            juce::Thread::sleep (400);
+            expect (processor.isRenderStalled(), "should be stalled once process calls actually stop for a while");
+
+            processor.processBlockBypassed (buffer, midi);
+            expect (! processor.isRenderStalled(), "a fresh process call (even processBlockBypassed) should clear the stall");
+        }
+
         beginTest ("isPluginActive reflects the bypass parameter directly, with no process call at all");
         {
             // This is the scenario that matters in practice: some hosts
@@ -277,7 +326,7 @@ public:
             // whether any rendering happens afterward — so isPluginActive()
             // must reflect it immediately, with no processBlock() call
             // in between.
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (44100.0, 512);
 
             expect (processor.isPluginActive(), "should start active");
@@ -295,7 +344,7 @@ public:
             constexpr double sampleRate = 44100.0;
             constexpr int blockSize = 512;
 
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (sampleRate, blockSize);
 
             processor.requestSpin();
@@ -329,7 +378,7 @@ public:
             constexpr double sampleRate = 44100.0;
             constexpr int blockSize = 512;
 
-            DAWtchaponAudioProcessor processor;
+            DAWchaponAudioProcessor processor;
             processor.prepareToPlay (sampleRate, blockSize);
 
             processor.requestSpin();

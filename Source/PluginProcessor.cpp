@@ -5,22 +5,23 @@
 #include "PluginEditor.h"
 #include "Toys/ToyRegistry.h"
 
-DAWtchaponAudioProcessor::DAWtchaponAudioProcessor()
+DAWchaponAudioProcessor::DAWchaponAudioProcessor()
     : AudioProcessor (BusesProperties()
                            .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                            .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
 {
     bypassParameter = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("bypass"));
+    lastRenderCallMs = juce::Time::getMillisecondCounterHiRes();
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout DAWtchaponAudioProcessor::createParameterLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout DAWchaponAudioProcessor::createParameterLayout()
 {
     return {
         std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { "activeToyIndex", 1 },
             "Active Toy",
-            ToyRegistry::getToyNames(),
+            ToyRegistry::getComboNames(),
             0),
         std::make_unique<juce::AudioParameterBool> (
             juce::ParameterID { "bypass", 1 },
@@ -29,7 +30,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout DAWtchaponAudioProcessor::cr
     };
 }
 
-void DAWtchaponAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void DAWchaponAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     processSpec.sampleRate = sampleRate;
     processSpec.maximumBlockSize = (juce::uint32) samplesPerBlock;
@@ -44,7 +45,7 @@ void DAWtchaponAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
         updateActiveToyIfParameterChanged();
 }
 
-bool DAWtchaponAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool DAWchaponAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     const auto mainOut = layouts.getMainOutputChannelSet();
 
@@ -54,7 +55,7 @@ bool DAWtchaponAudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
     return layouts.getMainInputChannelSet() == mainOut;
 }
 
-void DAWtchaponAudioProcessor::updateActiveToyIfParameterChanged()
+void DAWchaponAudioProcessor::updateActiveToyIfParameterChanged()
 {
     const auto newIndex = getActiveToyIndex();
 
@@ -63,7 +64,7 @@ void DAWtchaponAudioProcessor::updateActiveToyIfParameterChanged()
 
     cachedToyIndex = newIndex;
 
-    auto newToy = ToyRegistry::getToys()[(size_t) newIndex].create();
+    auto newToy = ToyRegistry::createForCombo (newIndex);
     newToy->prepare (processSpec);
 
     if (activeToy == nullptr)
@@ -81,10 +82,11 @@ void DAWtchaponAudioProcessor::updateActiveToyIfParameterChanged()
     crossfadeSamplesRemaining = crossfadeTotalSamples;
 }
 
-void DAWtchaponAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void DAWchaponAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
 
+    lastRenderCallMs = juce::Time::getMillisecondCounterHiRes();
     bypassedViaProcessCall = false;
     updateHostPlaybackInfo();
     performResetIfRequested();
@@ -153,8 +155,9 @@ void DAWtchaponAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     }
 }
 
-void DAWtchaponAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
+void DAWchaponAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    lastRenderCallMs = juce::Time::getMillisecondCounterHiRes();
     bypassedViaProcessCall = true;
 
     // Some hosts call this instead of processBlock() while bypassed
@@ -165,7 +168,7 @@ void DAWtchaponAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& b
     AudioProcessor::processBlockBypassed (buffer, midiMessages);
 }
 
-void DAWtchaponAudioProcessor::performResetIfRequested()
+void DAWchaponAudioProcessor::performResetIfRequested()
 {
     if (! resetRequested.exchange (false))
         return;
@@ -176,12 +179,13 @@ void DAWtchaponAudioProcessor::performResetIfRequested()
     crossfadeSamplesRemaining = 0;
     hasEverRevealedToy = false;
     pendingSpinIndex = -1;
+    previousToyIndex = -1;
 
     if (auto* param = apvts.getParameter ("activeToyIndex"))
         param->setValueNotifyingHost (param->convertTo0to1 (0.0f));
 }
 
-void DAWtchaponAudioProcessor::updateHostPlaybackInfo()
+void DAWchaponAudioProcessor::updateHostPlaybackInfo()
 {
     if (auto* playHead = getPlayHead())
     {
@@ -202,7 +206,7 @@ void DAWtchaponAudioProcessor::updateHostPlaybackInfo()
     hostIsPlaying = false;
 }
 
-int DAWtchaponAudioProcessor::getActiveToyIndex() const
+int DAWchaponAudioProcessor::getActiveToyIndex() const
 {
     if (auto* param = apvts.getRawParameterValue ("activeToyIndex"))
         return (int) param->load();
@@ -210,35 +214,79 @@ int DAWtchaponAudioProcessor::getActiveToyIndex() const
     return 0;
 }
 
-int DAWtchaponAudioProcessor::requestSpin()
+int DAWchaponAudioProcessor::requestSpin()
 {
-    const auto currentIndex = getActiveToyIndex();
+    const auto currentCombo = getActiveToyIndex();
+    const auto currentToyIndex = ToyRegistry::toyIndexOfCombo (currentCombo);
     const auto numToys = (int) ToyRegistry::getToys().size();
 
-    auto newIndex = currentIndex;
-    if (numToys > 1)
+    // Excludes both the currently active toy and whichever one was active
+    // immediately before it (see previousToyIndex), falling back to
+    // excluding only the current toy if that leaves nothing to pick from
+    // — only reachable with fewer than 3 toys registered, which isn't the
+    // case here, but keeps this from looping forever if that ever changes.
+    auto excludesPrevious = true;
     {
-        // Uniformly pick one of the *other* toys, so a spin always changes
-        // something.
-        const auto offset = 1 + rng.nextInt (numToys - 1);
-        newIndex = (currentIndex + offset) % numToys;
+        auto anyAvailable = false;
+        for (int i = 0; i < numToys; ++i)
+        {
+            if (i != currentToyIndex && i != previousToyIndex)
+            {
+                anyAvailable = true;
+                break;
+            }
+        }
+        excludesPrevious = anyAvailable;
     }
 
-    // Deliberately not applied yet — see confirmPendingSpin().
-    pendingSpinIndex = newIndex;
+    auto newToyIndex = currentToyIndex;
+    if (numToys > 1)
+    {
+        do
+        {
+            newToyIndex = rng.nextInt (numToys);
+        } while (newToyIndex == currentToyIndex
+                 || (excludesPrevious && newToyIndex == previousToyIndex));
+    }
 
-    return newIndex;
+    // Picked independently of the toy exclusion above, weighted by rarity
+    // (see ToyRegistry::variantWeights, Gold rarest) — the toy already
+    // being guaranteed to differ from the active one is enough on its own
+    // to guarantee the combo does too.
+    const auto variant = ToyRegistry::pickVariant (rng);
+    const auto newCombo = ToyRegistry::comboIndex (newToyIndex, variant);
+
+    // Deliberately not applied yet — see confirmPendingSpin().
+    pendingSpinIndex = newCombo;
+
+    return newCombo;
 }
 
-void DAWtchaponAudioProcessor::requestReset()
+void DAWchaponAudioProcessor::requestReset()
 {
     resetRequested = true;
 }
 
-void DAWtchaponAudioProcessor::confirmPendingSpin()
+#if DAWCHAPON_TEST_MODE
+void DAWchaponAudioProcessor::setActiveComboForTesting (int combo)
+{
+    hasEverRevealedToy = true;
+    pendingSpinIndex = -1;
+
+    if (auto* param = apvts.getParameter ("activeToyIndex"))
+        param->setValueNotifyingHost (param->convertTo0to1 ((float) combo));
+}
+#endif
+
+void DAWchaponAudioProcessor::confirmPendingSpin()
 {
     if (pendingSpinIndex < 0)
         return;
+
+    // The toy that's about to stop being active becomes "previous" for the
+    // next requestSpin() call's exclusion — read before the parameter
+    // changes underneath it.
+    previousToyIndex = ToyRegistry::toyIndexOfCombo (getActiveToyIndex());
 
     if (auto* param = apvts.getParameter ("activeToyIndex"))
         param->setValueNotifyingHost (param->convertTo0to1 ((float) pendingSpinIndex));
@@ -247,12 +295,12 @@ void DAWtchaponAudioProcessor::confirmPendingSpin()
     pendingSpinIndex = -1;
 }
 
-juce::AudioProcessorEditor* DAWtchaponAudioProcessor::createEditor()
+juce::AudioProcessorEditor* DAWchaponAudioProcessor::createEditor()
 {
-    return new DAWtchaponAudioProcessorEditor (*this);
+    return new DAWchaponAudioProcessorEditor (*this);
 }
 
-void DAWtchaponAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+void DAWchaponAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     apvts.state.setProperty ("hasRevealedToy", hasEverRevealedToy, nullptr);
 
@@ -262,7 +310,7 @@ void DAWtchaponAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         copyXmlToBinary (*xml, destData);
 }
 
-void DAWtchaponAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+void DAWchaponAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (std::unique_ptr<juce::XmlElement> xml (getXmlFromBinary (data, sizeInBytes)); xml != nullptr)
         apvts.replaceState (juce::ValueTree::fromXml (*xml));
@@ -277,5 +325,5 @@ void DAWtchaponAudioProcessor::setStateInformation (const void* data, int sizeIn
 // This creates new instances of the plugin.
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new DAWtchaponAudioProcessor();
+    return new DAWchaponAudioProcessor();
 }

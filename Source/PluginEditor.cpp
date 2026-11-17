@@ -5,7 +5,7 @@
 
 #include "Toys/ToyRegistry.h"
 
-#if ! DAWTCHAPON_USE_DEV_SERVER
+#if ! DAWCHAPON_USE_DEV_SERVER
  #include <BinaryData.h>
 #endif
 
@@ -18,7 +18,7 @@ namespace
     const juce::Identifier toySelectedEventId { "toySelected" };
     const juce::Identifier playbackChangedEventId { "playbackChanged" };
 
-#if ! DAWTCHAPON_USE_DEV_SERVER
+#if ! DAWCHAPON_USE_DEV_SERVER
     juce::String mimeTypeForFilename (const juce::String& filename)
     {
         if (filename.endsWithIgnoreCase (".html")) return "text/html";
@@ -37,7 +37,7 @@ namespace
 #endif
 }
 
-DAWtchaponAudioProcessorEditor::DAWtchaponAudioProcessorEditor (DAWtchaponAudioProcessor& p)
+DAWchaponAudioProcessorEditor::DAWchaponAudioProcessorEditor (DAWchaponAudioProcessor& p)
     : AudioProcessorEditor (&p),
       audioProcessor (p),
       webView (makeWebViewOptions())
@@ -46,7 +46,7 @@ DAWtchaponAudioProcessorEditor::DAWtchaponAudioProcessorEditor (DAWtchaponAudioP
     setResizable (true, true);
     setSize (680, 760);
 
-#if DAWTCHAPON_USE_DEV_SERVER
+#if DAWCHAPON_USE_DEV_SERVER
     webView.goToURL ("http://localhost:5173");
 #else
     webView.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
@@ -54,27 +54,83 @@ DAWtchaponAudioProcessorEditor::DAWtchaponAudioProcessorEditor (DAWtchaponAudioP
 
     lastKnownToyIndex = audioProcessor.getActiveToyIndex();
     startTimerHz (10);
+
+#if DAWCHAPON_TEST_MODE
+    addAndMakeVisible (testModePrevButton);
+    addAndMakeVisible (testModeNextButton);
+    addAndMakeVisible (testModeLabel);
+    testModeLabel.setJustificationType (juce::Justification::centred);
+    testModeLabel.setColour (juce::Label::backgroundColourId, juce::Colours::black);
+    testModeLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+
+    testModeComboIndex = audioProcessor.getActiveToyIndex();
+    audioProcessor.setActiveComboForTesting (testModeComboIndex);
+    updateTestModeLabel();
+
+    testModePrevButton.onClick = [this]
+    {
+        testModeComboIndex = (testModeComboIndex - 1 + ToyRegistry::numCombos) % ToyRegistry::numCombos;
+        audioProcessor.setActiveComboForTesting (testModeComboIndex);
+        updateTestModeLabel();
+    };
+    testModeNextButton.onClick = [this]
+    {
+        testModeComboIndex = (testModeComboIndex + 1) % ToyRegistry::numCombos;
+        audioProcessor.setActiveComboForTesting (testModeComboIndex);
+        updateTestModeLabel();
+    };
+#endif
 }
 
-DAWtchaponAudioProcessorEditor::~DAWtchaponAudioProcessorEditor()
+DAWchaponAudioProcessorEditor::~DAWchaponAudioProcessorEditor()
 {
     stopTimer();
 }
 
-void DAWtchaponAudioProcessorEditor::resized()
+void DAWchaponAudioProcessorEditor::resized()
 {
+#if DAWCHAPON_TEST_MODE
+    auto bounds = getLocalBounds();
+    auto controlBar = bounds.removeFromTop (36);
+    testModePrevButton.setBounds (controlBar.removeFromLeft (80).reduced (4));
+    testModeNextButton.setBounds (controlBar.removeFromRight (80).reduced (4));
+    testModeLabel.setBounds (controlBar);
+    webView.setBounds (bounds);
+#else
     webView.setBounds (getLocalBounds());
+#endif
 }
 
-juce::var DAWtchaponAudioProcessorEditor::makeToySelectedPayload (int toyIndex)
+#if DAWCHAPON_TEST_MODE
+void DAWchaponAudioProcessorEditor::updateTestModeLabel()
 {
+    const auto toyIndex = ToyRegistry::toyIndexOfCombo (testModeComboIndex);
+    const auto variant = ToyRegistry::variantOfCombo (testModeComboIndex);
+
+    testModeLabel.setText (
+        "TEST MODE  " + juce::String (testModeComboIndex + 1) + "/" + juce::String (ToyRegistry::numCombos)
+            + ":  " + juce::String (ToyRegistry::getToys()[(size_t) toyIndex].name)
+            + ToyRegistry::variantNameSuffix (variant),
+        juce::dontSendNotification);
+}
+#endif
+
+// `combo` is the flattened toy+variant index the processor actually
+// stores (see ToyRegistry::comboIndex) — decoded here into the separate
+// toyIndex/variant fields the WebView side works with.
+juce::var DAWchaponAudioProcessorEditor::makeToySelectedPayload (int combo)
+{
+    const auto toyIndex = ToyRegistry::toyIndexOfCombo (combo);
+    const auto variant = ToyRegistry::variantOfCombo (combo);
+
     auto* obj = new juce::DynamicObject();
     obj->setProperty ("toyIndex", toyIndex);
     obj->setProperty ("toyName", juce::String (ToyRegistry::getToys()[(size_t) toyIndex].name));
+    obj->setProperty ("variant", juce::String (ToyRegistry::variantId (variant)));
     return juce::var (obj);
 }
 
-juce::WebBrowserComponent::Options DAWtchaponAudioProcessorEditor::makeWebViewOptions()
+juce::WebBrowserComponent::Options DAWchaponAudioProcessorEditor::makeWebViewOptions()
 {
     using Options = juce::WebBrowserComponent::Options;
 
@@ -111,7 +167,7 @@ juce::WebBrowserComponent::Options DAWtchaponAudioProcessorEditor::makeWebViewOp
                                 completion (payload);
                             });
 
-#if ! DAWTCHAPON_USE_DEV_SERVER
+#if ! DAWCHAPON_USE_DEV_SERVER
     options = options.withResourceProvider (
         [this] (const juce::String& url) { return provideResource (url); });
 #endif
@@ -119,10 +175,10 @@ juce::WebBrowserComponent::Options DAWtchaponAudioProcessorEditor::makeWebViewOp
     return options;
 }
 
-std::optional<juce::WebBrowserComponent::Resource> DAWtchaponAudioProcessorEditor::provideResource (
+std::optional<juce::WebBrowserComponent::Resource> DAWchaponAudioProcessorEditor::provideResource (
     [[maybe_unused]] const juce::String& url)
 {
-#if DAWTCHAPON_USE_DEV_SERVER
+#if DAWCHAPON_USE_DEV_SERVER
     return std::nullopt;
 #else
     auto path = url;
@@ -159,7 +215,7 @@ std::optional<juce::WebBrowserComponent::Resource> DAWtchaponAudioProcessorEdito
 #endif
 }
 
-void DAWtchaponAudioProcessorEditor::timerCallback()
+void DAWchaponAudioProcessorEditor::timerCallback()
 {
     const auto current = audioProcessor.getActiveToyIndex();
 
@@ -204,7 +260,17 @@ void DAWtchaponAudioProcessorEditor::timerCallback()
     // Which of processBlock/processBlockBypassed was most recently
     // called — i.e. the host's own bypass/power button. Drives the GUI's
     // separate dim-when-off ambient lighting (independent of isPlaying).
-    const auto pluginActiveNow = audioProcessor.isPluginActive();
+    //
+    // Also false whenever isRenderStalled() — some hosts' own bypass
+    // control (confirmed with GarageBand's per-plugin power button)
+    // neither sets our bypass parameter via the AU property nor calls
+    // processBlockBypassed() at all, so isPluginActive() alone never
+    // notices; it just stops calling any process method whatsoever,
+    // exactly like it does on a genuine transport stop. This is a
+    // deliberately coarser signal than isPluginActive() alone — it'll
+    // also dim while genuinely paused on such a host, not just bypassed,
+    // but that's the only way to catch this case at all here.
+    const auto pluginActiveNow = audioProcessor.isPluginActive() && ! audioProcessor.isRenderStalled();
 
     if (playingNow != lastKnownPlaying || positionChanged || bpmChanged || pluginActiveNow != lastKnownActive)
     {

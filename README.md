@@ -1,11 +1,8 @@
-# DAWtchapon
+# DAWchapon
 
 A macOS audio-effect plugin (VST3 and AU): spin an animated gachapon machine
 to get a random "toy," and that toy secretly sets which audio effect is
 applied to the track. The effect stays active until you spin again.
-
-See `/Users/brendanazzano/.claude/plans/i-want-to-create-cheerful-hummingbird.md`
-for the full MVP design (toy roster, state machine, bridge design, scope).
 
 ## Project layout
 
@@ -25,11 +22,11 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 ```
 
-Build with no `--target` (or `--target DAWtchapon_VST3` / `--target DAWtchapon_AU`
-specifically) — `--target DAWtchapon` alone only builds JUCE's shared-code
+Build with no `--target` (or `--target DAWchapon_VST3` / `--target DAWchapon_AU`
+specifically) — `--target DAWchapon` alone only builds JUCE's shared-code
 static library, not an actual plugin binary.
 
-The build defaults to `DAWTCHAPON_USE_DEV_SERVER=ON`, which points the
+The build defaults to `DAWCHAPON_USE_DEV_SERVER=ON`, which points the
 plugin's WebView at `http://localhost:5173` (see below) instead of embedding
 built web assets — the fastest loop while iterating on the GUI. The built
 VST3 and AU are copied into `~/Library/Audio/Plug-Ins/VST3/` and
@@ -41,8 +38,8 @@ the AU target is for.
 Run the unit tests with:
 
 ```sh
-cmake --build build --target DAWtchaponTests
-./build/Tests/DAWtchaponTests_artefacts/Debug/DAWtchaponTests
+cmake --build build --target DAWchaponTests
+./build/Tests/DAWchaponTests_artefacts/Debug/DAWchaponTests
 ```
 
 ### Release (self-contained) build
@@ -52,7 +49,7 @@ the plugin embeds the built assets instead of pointing at `localhost`:
 
 ```sh
 cd WebUI && npm install && npm run build && cd ..
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DDAWTCHAPON_USE_DEV_SERVER=OFF
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DDAWCHAPON_USE_DEV_SERVER=OFF
 cmake --build build
 ```
 
@@ -70,36 +67,36 @@ dev-server `build/` setup:
 
 ```sh
 cd WebUI && npm install && npm run build && cd ..
-cmake -B build-release -DCMAKE_BUILD_TYPE=Release -DDAWTCHAPON_USE_DEV_SERVER=OFF
-cmake --build build-release --target DAWtchapon_AU
+cmake -B build-release -DCMAKE_BUILD_TYPE=Release -DDAWCHAPON_USE_DEV_SERVER=OFF
+cmake --build build-release --target DAWchapon_AU
 ```
 
-This produces `build-release/DAWtchapon_artefacts/Release/AU/DAWtchapon.component`.
+This produces `build-release/DAWchapon_artefacts/Release/AU/DAWchapon.component`.
 
 ### 2. Build for both Apple Silicon and Intel, if it matters
 
 The default build only targets whatever chip you're building on — confirmed
-arm64-only as of this writing (`file .../DAWtchapon.component/Contents/MacOS/DAWtchapon`).
+arm64-only as of this writing (`file .../DAWchapon.component/Contents/MacOS/DAWchapon`).
 If the other person might be on an Intel Mac, build universal instead:
 
 ```sh
-cmake -B build-release -DCMAKE_BUILD_TYPE=Release -DDAWTCHAPON_USE_DEV_SERVER=OFF \
+cmake -B build-release -DCMAKE_BUILD_TYPE=Release -DDAWCHAPON_USE_DEV_SERVER=OFF \
   -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
-cmake --build build-release --target DAWtchapon_AU
+cmake --build build-release --target DAWchapon_AU
 ```
 
 ### 3. Code signing — the actual blocker
 
 As built, the AU is only **ad-hoc signed**, which Gatekeeper rejects on
 another Mac — confirmed as of this writing:
-`spctl -a -t exec -vv DAWtchapon.component` → `rejected`. Two ways to deal
+`spctl -a -t exec -vv DAWchapon.component` → `rejected`. Two ways to deal
 with that:
 
 - **Informal (what makes sense for sharing with one person):** zip and send
   it as-is, and have the recipient clear the quarantine flag themselves
   after downloading, before GarageBand will load it:
   ```sh
-  xattr -cr ~/Library/Audio/Plug-Ins/Components/DAWtchapon.component
+  xattr -cr ~/Library/Audio/Plug-Ins/Components/DAWchapon.component
   ```
   (equivalent to right-clicking the `.component` in Finder → Open → approving
   the warning.)
@@ -109,14 +106,14 @@ with that:
   ```sh
   codesign --deep --force --options runtime \
     --sign "Developer ID Application: Your Name (TEAMID)" \
-    build-release/DAWtchapon_artefacts/Release/AU/DAWtchapon.component
+    build-release/DAWchapon_artefacts/Release/AU/DAWchapon.component
 
   ditto -c -k --keepParent \
-    build-release/DAWtchapon_artefacts/Release/AU/DAWtchapon.component \
-    DAWtchapon.zip
-  xcrun notarytool submit DAWtchapon.zip \
+    build-release/DAWchapon_artefacts/Release/AU/DAWchapon.component \
+    DAWchapon.zip
+  xcrun notarytool submit DAWchapon.zip \
     --apple-id <your-apple-id> --team-id <TEAMID> --password <app-specific-password> --wait
-  xcrun stapler staple build-release/DAWtchapon_artefacts/Release/AU/DAWtchapon.component
+  xcrun stapler staple build-release/DAWchapon_artefacts/Release/AU/DAWchapon.component
   ```
   Overkill for sending to one friend, but it's the only way to avoid asking
   the recipient to run a terminal command first.
@@ -124,17 +121,17 @@ with that:
 ### 4. Package and send it
 
 ```sh
-cd build-release/DAWtchapon_artefacts/Release/AU
-zip -r DAWtchapon.component.zip DAWtchapon.component
+cd build-release/DAWchapon_artefacts/Release/AU
+zip -r DAWchapon.component.zip DAWchapon.component
 ```
 
-Send `DAWtchapon.component.zip` however's convenient (AirDrop, cloud link,
+Send `DAWchapon.component.zip` however's convenient (AirDrop, cloud link,
 etc).
 
 ### 5. What the recipient does
 
 1. Unzip it.
-2. Move `DAWtchapon.component` into `~/Library/Audio/Plug-Ins/Components/`.
+2. Move `DAWchapon.component` into `~/Library/Audio/Plug-Ins/Components/`.
 3. If it wasn't notarized, clear the quarantine flag (step 3's `xattr`
    command above, run on their machine against their own copy).
 4. Quit and reopen GarageBand (or run `killall -9 AudioComponentRegistrar`
@@ -163,7 +160,7 @@ random pick instead of calling into C++.
    ```sh
    /Applications/pluginval.app/Contents/MacOS/pluginval \
      --validate-in-process --strictness-level 10 \
-     build/DAWtchapon_artefacts/Debug/VST3/DAWtchapon.vst3
+     build/DAWchapon_artefacts/Debug/VST3/DAWchapon.vst3
    ```
    Passes clean at strictness level 10 as of this writing.
 2. `auval` (ships with macOS) for the AU build — GarageBand silently hides

@@ -9,8 +9,9 @@ import { VARIANTS } from "../toyData.js";
 // (same geometry/color as the one that opens out of the capsule) instead
 // of a flat stand-in icon.
 export class ToyIcon {
-  constructor(container) {
+  constructor(container, { spin = true } = {}) {
     this.container = container;
+    this.spin = spin;
     this.mesh = null;
     this._disposed = false;
     // Bumped on every show()/clear() call, so a show() whose model load
@@ -68,6 +69,12 @@ export class ToyIcon {
 
       this.mesh = makeToyMesh(toyIndex, variant);
       this.mesh.scale.setScalar(0.85);
+      // Matches the slight turn spin would have settled into, so a
+      // non-spinning icon doesn't just look like a flat front-on cutout.
+      if (!this.spin) {
+        this.mesh.rotation.y = Math.PI * 0.15;
+        this.mesh.rotation.x = -0.05;
+      }
       this.scene.add(this.mesh);
     });
   }
@@ -94,7 +101,7 @@ export class ToyIcon {
     const dt = this._lastFrameMs ? Math.min((nowMs - this._lastFrameMs) / 1000, 0.05) : 0;
     this._lastFrameMs = nowMs;
 
-    if (this.mesh) {
+    if (this.mesh && this.spin) {
       this.mesh.rotation.y += dt * 0.8;
       this.mesh.rotation.x = Math.sin(nowMs * 0.0006) * 0.15;
     }

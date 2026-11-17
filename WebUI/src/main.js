@@ -40,7 +40,7 @@ const canUsePlugin =
 // WebBrowserComponent, window.parent === window, so this just posts to
 // itself with nothing listening.
 function notifyEmbedder(type, data = {}) {
-  window.parent.postMessage({ source: "dawtchapon-webui", type, ...data }, "*");
+  window.parent.postMessage({ source: "dawchapon-webui", type, ...data }, "*");
 }
 
 // Cycles deterministically through every toy+variant combo in order

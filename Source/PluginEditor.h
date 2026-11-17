@@ -7,25 +7,36 @@
 
 #include "PluginProcessor.h"
 
-class DAWtchaponAudioProcessorEditor : public juce::AudioProcessorEditor,
+class DAWchaponAudioProcessorEditor : public juce::AudioProcessorEditor,
                                         private juce::Timer
 {
 public:
-    explicit DAWtchaponAudioProcessorEditor (DAWtchaponAudioProcessor&);
-    ~DAWtchaponAudioProcessorEditor() override;
+    explicit DAWchaponAudioProcessorEditor (DAWchaponAudioProcessor&);
+    ~DAWchaponAudioProcessorEditor() override;
 
     void resized() override;
 
 private:
     juce::WebBrowserComponent::Options makeWebViewOptions();
     std::optional<juce::WebBrowserComponent::Resource> provideResource (const juce::String& url);
-    static juce::var makeToySelectedPayload (int toyIndex);
+    static juce::var makeToySelectedPayload (int combo);
 
     void timerCallback() override;
 
-    DAWtchaponAudioProcessor& audioProcessor;
+#if DAWCHAPON_TEST_MODE
+    void updateTestModeLabel();
+#endif
+
+    DAWchaponAudioProcessor& audioProcessor;
     juce::WebBrowserComponent webView;
-    int lastKnownToyIndex = -1;
+
+#if DAWCHAPON_TEST_MODE
+    juce::TextButton testModePrevButton { "< Prev" };
+    juce::TextButton testModeNextButton { "Next >" };
+    juce::Label testModeLabel;
+    int testModeComboIndex = 0;
+#endif
+    int lastKnownToyIndex = -1; // actually a ToyRegistry combo index
     bool lastKnownPlaying = false;
     bool lastKnownActive = true;
     double lastKnownBeatPosition = 0.0;
@@ -37,5 +48,5 @@ private:
     double previousTickBeatPosition = 0.0;
     bool hasPreviousTickBeatPosition = false;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DAWtchaponAudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DAWchaponAudioProcessorEditor)
 };
