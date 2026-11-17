@@ -1,0 +1,5 @@
+# Hashes of file build rules.
+321f42b9a7f7fa0b29218e76f846136e CMakeFiles/DAWtchapon_vst3_helper
+b04e9fd443fc3e0fafa2580eef8e50d7 DAWtchapon_artefacts/JuceLibraryCode/DAWtchapon_AU/PkgInfo
+aa462ac986c23064bf008e880660934b DAWtchapon_artefacts/JuceLibraryCode/DAWtchapon_VST3/PkgInfo
+c176a1402c478ee98303e97e73627c74 juce_binarydata_DAWtchaponWebAssets/JuceLibraryCode/BinaryData1.cpp

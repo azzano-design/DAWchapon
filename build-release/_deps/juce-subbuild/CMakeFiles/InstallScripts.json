@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/brendanazzano/Development/VibeCoding/DAWtchapon/build-release/_deps/juce-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

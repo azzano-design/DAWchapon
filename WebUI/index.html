@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DAWtchapon</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #15151a;
+        font-family: -apple-system, system-ui, sans-serif;
+        color: #f2f2f2;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+
+      #stage {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      #scene-container {
+        position: absolute;
+        inset: 0;
+      }
+
+      #gold-glow {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+        background: radial-gradient(circle at 50% 55%, rgba(255, 211, 107, 0.35), rgba(255, 211, 107, 0) 55%);
+        transition: opacity 0.4s ease;
+      }
+
+      #gold-glow.active {
+        opacity: 0.6;
+      }
+
+      #reset-button {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 1px solid rgba(242, 242, 242, 0.25);
+        background: rgba(20, 20, 24, 0.55);
+        color: rgba(242, 242, 242, 0.75);
+        font-size: 16px;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 5;
+        transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+      }
+
+      #reset-button:hover {
+        background: rgba(40, 40, 46, 0.75);
+        color: #f2f2f2;
+      }
+
+      #reset-button:active {
+        transform: scale(0.92);
+      }
+
+      #status-footer {
+        flex: 0 0 40px;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        background: #000;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      #status-footer.visible {
+        opacity: 1;
+      }
+
+      .marquee-track {
+        display: flex;
+        white-space: nowrap;
+        animation: marquee-scroll 16s linear infinite;
+      }
+
+      .marquee-text {
+        padding-right: 64px;
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #ffd36b;
+      }
+
+      @keyframes marquee-scroll {
+        from {
+          transform: translateX(0);
+        }
+        to {
+          transform: translateX(-50%);
+        }
+      }
+
+      #reveal-card {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%) scale(0.75);
+        opacity: 0;
+        pointer-events: none;
+        text-align: center;
+        padding: 28px 40px;
+        border-radius: 18px;
+        background: rgba(20, 18, 10, 0.72);
+        border: 1px solid rgba(255, 211, 107, 0.55);
+        box-shadow: 0 0 40px rgba(255, 211, 107, 0.35), 0 10px 30px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(6px);
+        transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
+      }
+
+      #reveal-card.visible {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      #reveal-card .reveal-icon {
+        width: 110px;
+        height: 110px;
+        margin: 0 auto 6px;
+      }
+
+      #reveal-card .reveal-icon canvas {
+        display: block;
+      }
+
+      #reveal-card .reveal-name {
+        font-size: 24px;
+        font-weight: 700;
+        color: #ffd36b;
+        letter-spacing: 0.01em;
+      }
+
+      #reveal-card .reveal-effect {
+        margin-top: 6px;
+        font-size: 14px;
+        font-style: italic;
+        color: rgba(242, 242, 242, 0.85);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="scene-container"></div>
+      <div id="gold-glow"></div>
+      <button id="reset-button" title="Reset to no toy" aria-label="Reset">⟲</button>
+      <div id="reveal-card">
+        <div class="reveal-icon"></div>
+        <div class="reveal-name"></div>
+        <div class="reveal-effect"></div>
+      </div>
+    </div>
+    <div id="status-footer">
+      <div class="marquee-track">
+        <span class="marquee-text"></span>
+        <span class="marquee-text" aria-hidden="true"></span>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

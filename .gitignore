@@ -1,0 +1,8 @@
+build/
+cmake-build*/
+
+WebUI/node_modules/
+WebUI/dist/
+
+.DS_Store
+*.user

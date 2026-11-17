@@ -1,0 +1,3 @@
+/Users/brendanazzano/Development/VibeCoding/DAWtchapon/build-release/vst3_helpers/DAWtchapon/CMakeFiles/vst3_helper.dir
+/Users/brendanazzano/Development/VibeCoding/DAWtchapon/build-release/vst3_helpers/DAWtchapon/CMakeFiles/edit_cache.dir
+/Users/brendanazzano/Development/VibeCoding/DAWtchapon/build-release/vst3_helpers/DAWtchapon/CMakeFiles/rebuild_cache.dir

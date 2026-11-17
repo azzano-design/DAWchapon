@@ -1,0 +1,2 @@
+/usr/bin/ar qc libDAWtchaponWebAssets.a CMakeFiles/DAWtchaponWebAssets.dir/juce_binarydata_DAWtchaponWebAssets/JuceLibraryCode/BinaryData1.cpp.o CMakeFiles/DAWtchaponWebAssets.dir/juce_binarydata_DAWtchaponWebAssets/JuceLibraryCode/BinaryData2.cpp.o
+/usr/bin/ranlib libDAWtchaponWebAssets.a
