@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-import { makeToyMesh } from "./toyMesh.js";
+import { makeToyMesh, preloadKeshiModel } from "./toyMesh.js";
 
 // A tiny self-contained Three.js viewport that renders just one toy mesh,
 // slowly rotating — used so the reveal card shows the *actual* 3D toy
@@ -10,6 +10,12 @@ export class ToyIcon {
   constructor(container) {
     this.container = container;
     this.mesh = null;
+    this._disposed = false;
+    // Bumped on every show()/clear() call, so a show() whose model load
+    // was still pending when a later show() or clear() superseded it can
+    // tell, once that load finally resolves, that it's no longer current
+    // and should skip adding its mesh.
+    this._showRequestId = 0;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.1, 10);
@@ -35,12 +41,23 @@ export class ToyIcon {
 
   show(toyIndex) {
     this.clear();
-    this.mesh = makeToyMesh(toyIndex);
-    this.mesh.scale.setScalar(0.85);
-    this.scene.add(this.mesh);
+
+    // The shared toy model may still be loading — wait for it instead of
+    // assuming it's ready. A later show() or clear() bumps
+    // _showRequestId, so if that's happened by the time this resolves,
+    // this call is stale and should do nothing.
+    const requestId = ++this._showRequestId;
+    preloadKeshiModel().then(() => {
+      if (this._disposed || requestId !== this._showRequestId) return;
+
+      this.mesh = makeToyMesh(toyIndex);
+      this.mesh.scale.setScalar(0.85);
+      this.scene.add(this.mesh);
+    });
   }
 
   clear() {
+    this._showRequestId += 1;
     if (this.mesh) {
       this.scene.remove(this.mesh);
       this.mesh.geometry.dispose();
@@ -70,6 +87,7 @@ export class ToyIcon {
   }
 
   dispose() {
+    this._disposed = true;
     window.removeEventListener("resize", this._onResize);
     this.clear();
     this.renderer.dispose();

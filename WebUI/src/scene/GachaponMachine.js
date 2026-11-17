@@ -1,7 +1,9 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import GUI from "lil-gui";
 
 import { getToy, TOYS } from "../toyData.js";
-import { makeToyMesh } from "./toyMesh.js";
+import { makeToyMesh, preloadKeshiModel } from "./toyMesh.js";
 
 // Machine proportions (world units), front panel centered on local X=0,
 // front face at Z = FRONT_Z. Modeled loosely on a classic capsule-vending
@@ -26,9 +28,46 @@ const COIN_SLOT_Y = PEDESTAL_TOP_Y + BODY.height * 0.86;
 
 const MACHINE_TOTAL_HEIGHT = BADGE_CENTER_Y + BADGE.height / 2;
 
-const SCENE_BACKGROUND = 0x15151a;
+// Studio backdrop palette: a soft, slightly-lit patch roughly where a
+// softbox would hit a paper sweep, fading to shadow at the edges/corners
+// — used for both the background and the floor so they read as one
+// continuous surface instead of two flat, differently colored blocks
+// meeting at a hard horizon line.
+const BACKDROP_SHADOW = 0x0e0e13;
+const BACKDROP_LIT = 0x2b2b35;
 const GOLD = new THREE.Color(0xffd36b);
-const BACKLIGHT_COLOR = 0x7aa2ff;
+
+// The two flanking machines are flattened to this near-black for every
+// part except their glass bins — silhouettes, not competing products.
+const NEAR_BLACK = 0x0a0a0d;
+// X offset for the flanking machines. Clears both the real machine's own
+// footprint (its widest part, the pedestal, has a ~0.9 half-width) and the
+// sidebar "currently active toy" display (which sits around x = 1.5).
+// Halving the raw center-to-center distance (3.0) would put the two
+// pedestals (half-width ~0.9 each) overlapping by 0.3 units, so this
+// halves the visible gap between them instead (1.2 -> 0.6) — closer, but
+// without the machines poking through each other.
+const SIDE_MACHINE_OFFSET = 2.4;
+// Sits in the middle of the gap between the real machine's footprint and
+// the flanking machine's near edge — since both have the same half-width,
+// that midpoint always works out to half the center-to-center offset,
+// regardless of how wide either machine actually is. Keeps the toy clear
+// of both instead of sinking into the flanking machine's pedestal.
+const SIDEBAR_TOY_X = SIDE_MACHINE_OFFSET / 2;
+// 4x the original decorative-icon scale — it's meant to be a prominent,
+// spinnable showcase piece now, not a small side detail.
+const SIDEBAR_TOY_SCALE = 0.22 * 4;
+// Pulled well forward of FRONT_Z/the pedestal's own front face (0.65) so
+// the now much bigger toy clears every machine's silhouette in depth,
+// even where its wider footprint overlaps one of them in X.
+const SIDEBAR_TOY_Z = 0.9;
+// Radians of toy rotation per CSS pixel of pointer movement while
+// dragging it.
+const TOY_DRAG_SENSITIVITY = 0.01;
+// Converts "radians moved on the drag's last pointer event" into
+// "radians per second of carried-over spin" once released — see endDrag
+// in _initPointerHandling.
+const TOY_SPIN_MOMENTUM_PER_SECOND = 60;
 
 function makeCanvasTexture(draw, width = 256, height = 256) {
   const canvas = document.createElement("canvas");
@@ -75,6 +114,45 @@ function makeSidePillarTexture() {
     ctx.fillText("D A W T C H A P O N   S T A T I O N", 0, 0);
     ctx.restore();
   }, 128, 1024);
+}
+
+// Scene backdrop: a vertical gradient (dark at top and bottom, a soft lit
+// patch in the upper-middle) plus a horizontal vignette, like a plain
+// paper sweep lit by one soft box rather than a flat poster color.
+function makeBackdropTexture() {
+  const texture = makeCanvasTexture((ctx, w, h) => {
+    const vertical = ctx.createLinearGradient(0, 0, 0, h);
+    vertical.addColorStop(0, "#111118");
+    vertical.addColorStop(0.42, `#${new THREE.Color(BACKDROP_LIT).getHexString()}`);
+    vertical.addColorStop(0.72, "#1c1c24");
+    vertical.addColorStop(1, `#${new THREE.Color(BACKDROP_SHADOW).getHexString()}`);
+    ctx.fillStyle = vertical;
+    ctx.fillRect(0, 0, w, h);
+
+    const vignette = ctx.createRadialGradient(w / 2, h * 0.42, 0, w / 2, h * 0.42, w * 0.65);
+    vignette.addColorStop(0, "rgba(0,0,0,0)");
+    vignette.addColorStop(1, "rgba(0,0,0,0.55)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, w, h);
+  }, 512, 512);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+// Floor: a soft radial vignette, lighter where the machine actually sits
+// and darker toward the edges, picking the same shadow tone as the
+// backdrop's bottom edge so the two meet without a visible seam.
+function makeFloorTexture() {
+  const texture = makeCanvasTexture((ctx, w, h) => {
+    const gradient = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    gradient.addColorStop(0, "#26262d");
+    gradient.addColorStop(0.55, "#1c1c22");
+    gradient.addColorStop(1, `#${new THREE.Color(BACKDROP_SHADOW).getHexString()}`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
+  }, 512, 512);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 // A soft 4-point sparkle, used for the reveal's particle burst.
@@ -126,6 +204,29 @@ function makeGlowTexture() {
   }, 128, 128);
 }
 
+// Glossy injection-molded plastic — the machine body/pedestal/badge/knob
+// and the capsules all share this look: a clearcoat layer on top of a
+// fairly smooth base coat reads as polished plastic rather than chalky
+// matte paint, especially once it has an environment map to reflect.
+function makePlasticMaterial(color, { roughness = 0.35, transparent = false } = {}) {
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    roughness,
+    metalness: 0,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.2,
+    transparent,
+  });
+}
+
+// lil-gui's color controller needs a plain hex-string property to bind to,
+// not a THREE.Color — this proxies one onto the real color in place.
+function bindColor(folder, threeColor, label) {
+  const proxy = { value: `#${threeColor.getHexString()}` };
+  folder.addColor(proxy, "value").name(label).onChange((hex) => threeColor.set(hex));
+  return proxy;
+}
+
 // Classic two-tone capsule: a colored top half and a second half, built
 // from two hemisphere shells sharing one center so they read as a single
 // closed sphere until animated apart.
@@ -143,14 +244,13 @@ function makeCapsuleHalves(topColor, bottomColor, radius = 0.22, { castShadow = 
   // WebGL's transparency sort gets visibly glitchy with that many
   // overlapping transparent objects. Only the single falling prize
   // capsule opts into transparent, for its fade-out.
-  const top = new THREE.Mesh(
-    topGeo,
-    new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.35, side: THREE.DoubleSide, transparent })
-  );
-  const bottom = new THREE.Mesh(
-    bottomGeo,
-    new THREE.MeshStandardMaterial({ color: bottomColor, roughness: 0.5, side: THREE.DoubleSide, transparent })
-  );
+  const topMaterial = makePlasticMaterial(topColor, { roughness: 0.3, transparent });
+  const bottomMaterial = makePlasticMaterial(bottomColor, { roughness: 0.4, transparent });
+  topMaterial.side = THREE.DoubleSide;
+  bottomMaterial.side = THREE.DoubleSide;
+
+  const top = new THREE.Mesh(topGeo, topMaterial);
+  const bottom = new THREE.Mesh(bottomGeo, bottomMaterial);
   top.castShadow = castShadow;
   bottom.castShadow = castShadow;
 
@@ -158,9 +258,255 @@ function makeCapsuleHalves(topColor, bottomColor, radius = 0.22, { castShadow = 
   return { group, top, bottom };
 }
 
+// Builds one full machine — pedestal, body, glass bin + its resting
+// capsules, badge, side pillar, coin slot, dispensing window, and knob.
+// With no accentColor this is the normal white-plastic machine (badge and
+// side-pillar keep their printed textures, the knob keeps its colored
+// rings, bin capsules keep their toy colors) — used for the real,
+// interactive machine. With an accentColor, every one of those parts is
+// flattened to that single color instead — textures, rings and all — for
+// the two static flanking machines. The glass bin itself never changes:
+// only the plastic/paint varies between versions, never the glass.
+function buildMachine({ accentColor = null } = {}) {
+  const group = new THREE.Group();
+  const plasticColor = accentColor ?? 0xf4f4f2;
+
+  const pedestal = new THREE.Mesh(
+    new THREE.BoxGeometry(PEDESTAL.width, PEDESTAL.height, PEDESTAL.depth),
+    makePlasticMaterial(plasticColor, { roughness: 0.42 })
+  );
+  pedestal.position.y = PEDESTAL.height / 2;
+  pedestal.castShadow = true;
+  pedestal.receiveShadow = true;
+  group.add(pedestal);
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(BODY.width, BODY.height, BODY.depth),
+    makePlasticMaterial(plasticColor, { roughness: 0.32 })
+  );
+  body.position.y = BODY_CENTER_Y;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+
+  // Real glass: fully opaque (transmission handles the see-through
+  // effect itself, so opacity/transparent would just fight it), a
+  // near-mirror-smooth surface, and a physical index of refraction.
+  // attenuationColor gives it a faint blue tint that only shows up once
+  // light has traveled through enough thickness, like real glass, rather
+  // than flatly tinting everything the way multiplying by `color` would.
+  const bin = new THREE.Mesh(
+    new THREE.BoxGeometry(BIN.width, BIN.height, BIN.depth),
+    new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      metalness: 0,
+      roughness: 0.03,
+      transmission: 1,
+      thickness: 0.6,
+      ior: 1.5,
+      attenuationColor: new THREE.Color(0xcfe8fb),
+      attenuationDistance: 1.2,
+      clearcoat: 1,
+      clearcoatRoughness: 0.05,
+    })
+  );
+  bin.position.y = BIN_CENTER_Y;
+  bin.castShadow = true;
+  group.add(bin);
+
+  const badge = new THREE.Mesh(
+    new THREE.BoxGeometry(BADGE.width, BADGE.height, BADGE.depth),
+    accentColor
+      ? makePlasticMaterial(plasticColor, { roughness: 0.4 })
+      : new THREE.MeshPhysicalMaterial({
+          map: makeBadgeTexture(),
+          color: plasticColor,
+          roughness: 0.4,
+          clearcoat: 0.6,
+          clearcoatRoughness: 0.2,
+        })
+  );
+  badge.position.y = BADGE_CENTER_Y;
+  badge.castShadow = true;
+  group.add(badge);
+
+  const sidePillar = new THREE.Mesh(
+    new THREE.BoxGeometry(0.12, BODY.height + BIN.height, 1.0),
+    accentColor
+      ? makePlasticMaterial(plasticColor, { roughness: 0.5 })
+      : new THREE.MeshStandardMaterial({ map: makeSidePillarTexture(), roughness: 0.5 })
+  );
+  sidePillar.position.set(BODY.width / 2 + 0.06, BODY_CENTER_Y + BIN.height / 2, 0);
+  sidePillar.castShadow = true;
+  group.add(sidePillar);
+
+  const coinSlot = new THREE.Mesh(
+    new THREE.BoxGeometry(0.14, 0.32, 0.04),
+    new THREE.MeshStandardMaterial({ color: accentColor ?? 0x222222, roughness: 0.7 })
+  );
+  coinSlot.position.set(BODY.width * 0.28, COIN_SLOT_Y, FRONT_Z + 0.02);
+  group.add(coinSlot);
+
+  // Dispensing window: the "bottom hole" the prize capsule appears in.
+  const windowFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(0.56, 0.5, 0.3),
+    makePlasticMaterial(plasticColor, { roughness: 0.45 })
+  );
+  windowFrame.position.set(0, WINDOW_Y, FRONT_Z - 0.1);
+  group.add(windowFrame);
+
+  const windowHole = new THREE.Mesh(
+    new THREE.BoxGeometry(0.46, 0.4, 0.26),
+    new THREE.MeshStandardMaterial({ color: accentColor ?? 0x161616, roughness: 0.9 })
+  );
+  windowHole.position.set(0, WINDOW_Y, FRONT_Z - 0.07);
+  group.add(windowHole);
+
+  // Pulled forward of FRONT_Z by enough to clear the PEDESTAL's front
+  // face (which sits further forward than the body's, at PEDESTAL.depth/2
+  // = 0.65) plus the capsule's own radius (0.26) plus margin — not just
+  // clear of the body. The "open" phase's bottom-half dip drops low
+  // enough to reach pedestal height, so without this extra clearance its
+  // back edge sinks into the pedestal once it's down there.
+  const dispenserZ = FRONT_Z + 0.5;
+
+  const dispenserAnchor = new THREE.Object3D();
+  dispenserAnchor.position.set(0, WINDOW_Y + 0.02, dispenserZ);
+  group.add(dispenserAnchor);
+
+  const dispenserDropStart = new THREE.Object3D();
+  dispenserDropStart.position.set(0, WINDOW_Y + 0.55, dispenserZ);
+  group.add(dispenserDropStart);
+
+  // Front-facing dial: flat 2D shapes in the group's local XY plane,
+  // which already faces the camera since the group itself isn't rotated.
+  const knobGroup = new THREE.Group();
+  knobGroup.position.set(0, KNOB_Y, FRONT_Z + 0.01);
+  group.add(knobGroup);
+
+  const knobBase = new THREE.Mesh(
+    new THREE.CircleGeometry(0.42, 32),
+    makePlasticMaterial(accentColor ?? 0xffffff, { roughness: 0.3 })
+  );
+  knobGroup.add(knobBase);
+
+  const outerRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.34, 0.4, 32),
+    new THREE.MeshStandardMaterial({ color: accentColor ?? 0x3aa6e0, roughness: 0.4 })
+  );
+  outerRing.position.z = 0.002;
+  knobGroup.add(outerRing);
+
+  const innerRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.24, 0.3, 32),
+    new THREE.MeshStandardMaterial({ color: accentColor ?? 0xf2d06e, roughness: 0.4 })
+  );
+  innerRing.position.z = 0.003;
+  knobGroup.add(innerRing);
+
+  // A curved "turn this way" arrow arcing over the top of the dial (11
+  // o'clock to 1 o'clock), with an arrowhead at its clockwise-leading
+  // end — unlike the single static wedge this replaced (which pointed
+  // radially in at the 9 o'clock mark, a direction unrelated to which
+  // way to actually turn it), the arrowhead's tangent direction here
+  // directly shows the turning direction.
+  const directionArrowColor = accentColor ?? 0xe0455b;
+  const ARROW_INNER_R = 0.42;
+  const ARROW_OUTER_R = 0.47;
+  const ARROW_TAIL_ANGLE = (120 * Math.PI) / 180;
+  const ARROW_HEAD_ANGLE = (60 * Math.PI) / 180;
+
+  const arrowTrack = new THREE.Mesh(
+    new THREE.RingGeometry(ARROW_INNER_R, ARROW_OUTER_R, 24, 1, ARROW_HEAD_ANGLE, ARROW_TAIL_ANGLE - ARROW_HEAD_ANGLE),
+    new THREE.MeshStandardMaterial({ color: directionArrowColor, roughness: 0.4 })
+  );
+  arrowTrack.position.z = 0.004;
+  knobGroup.add(arrowTrack);
+
+  const arrowheadLength = 0.1;
+  const arrowheadWidth = 0.09;
+  const arrowheadShape = new THREE.Shape();
+  arrowheadShape.moveTo(-arrowheadLength / 2, arrowheadWidth / 2);
+  arrowheadShape.lineTo(-arrowheadLength / 2, -arrowheadWidth / 2);
+  arrowheadShape.lineTo(arrowheadLength / 2, 0);
+  arrowheadShape.closePath();
+
+  const arrowhead = new THREE.Mesh(
+    new THREE.ShapeGeometry(arrowheadShape),
+    new THREE.MeshStandardMaterial({ color: directionArrowColor, roughness: 0.4 })
+  );
+  const arrowMidRadius = (ARROW_INNER_R + ARROW_OUTER_R) / 2;
+  arrowhead.position.set(
+    arrowMidRadius * Math.cos(ARROW_HEAD_ANGLE),
+    arrowMidRadius * Math.sin(ARROW_HEAD_ANGLE),
+    0.0045
+  );
+  // Faces along the clockwise tangent at the head angle, i.e. the
+  // direction of travel for decreasing angle: (sinφ, -cosφ).
+  arrowhead.rotation.z = Math.atan2(-Math.cos(ARROW_HEAD_ANGLE), Math.sin(ARROW_HEAD_ANGLE));
+  knobGroup.add(arrowhead);
+
+  const hub = new THREE.Mesh(
+    new THREE.CircleGeometry(0.06, 16),
+    makePlasticMaterial(accentColor ?? 0xdddddd, { roughness: 0.25 })
+  );
+  hub.position.z = 0.005;
+  knobGroup.add(hub);
+
+  // Densely packs the clear bin with resting capsules (an elliptical
+  // footprint with a little random dropout) so it reads as full rather
+  // than a handful of balls floating in the glass.
+  const binCapsules = new THREE.Group();
+  const radius = 0.14;
+  const spacing = radius * 1.65;
+  const marginXZ = 0.14;
+  const halfW = BIN.width / 2 - marginXZ;
+  const halfD = BIN.depth / 2 - marginXZ;
+  const fillBottom = BIN_CENTER_Y - BIN.height / 2 + 0.18;
+  const fillTop = BIN_CENTER_Y + BIN.height / 2 - 0.4;
+
+  let colorCursor = 0;
+  for (let y = fillBottom; y <= fillTop; y += spacing * 0.9) {
+    for (let x = -halfW; x <= halfW; x += spacing) {
+      for (let z = -halfD; z <= halfD; z += spacing) {
+        const nx = x / halfW;
+        const nz = z / halfD;
+        if (nx * nx + nz * nz > 0.92) continue;
+        if (Math.random() > 0.88) continue;
+
+        const toy = TOYS[colorCursor % TOYS.length];
+        colorCursor += 1;
+
+        // Same two-tone capsule construction as the prize capsule, so the
+        // ones resting in the bin actually match the one that drops (or,
+        // for a flanking machine, match its own flattened color).
+        const { group: capsule } = makeCapsuleHalves(
+          accentColor ?? toy.color,
+          accentColor ?? 0xf4f4f2,
+          radius * (0.85 + Math.random() * 0.25)
+        );
+        capsule.position.set(
+          x + (Math.random() - 0.5) * spacing * 0.4,
+          y + (Math.random() - 0.5) * spacing * 0.4,
+          z + (Math.random() - 0.5) * spacing * 0.4
+        );
+        capsule.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        capsule.userData.basePosition = capsule.position.clone();
+        capsule.userData.bouncePhase = Math.random() * Math.PI * 2;
+        binCapsules.add(capsule);
+      }
+    }
+  }
+  group.add(binCapsules);
+
+  return { group, knobGroup, knobHitTarget: knobBase, dispenserAnchor, dispenserDropStart, binCapsules };
+}
+
 export class GachaponMachine {
-  constructor(container, callbacks = {}) {
+  constructor(container, callbacks = {}, options = {}) {
     this.container = container;
+    this.options = { enableDebugGui: false, ...options };
+    this._disposed = false;
     this.callbacks = {
       onSpinRequested: () => {},
       onRumble: () => {},
@@ -191,15 +537,30 @@ export class GachaponMachine {
     // moment the next capsule drops.
     this.sidebarToyMesh = null;
     this.sidebarFade = null;
+    // Which toy (if any) the sidebar display currently shows — null means
+    // none, which is also what tells the beat-pulse backlight (below) to
+    // fall back to its idle color instead of tinting to a toy's color.
+    this.activeToyIndex = null;
+    // Lets the user grab the sidebar toy and spin it by hand — locked to
+    // horizontal (yaw) only, like spinning a figure on a turntable, rather
+    // than a free trackball. While dragging, rotation is driven directly
+    // from pointer movement (see _initPointerHandling); _toySpinVelocityYaw
+    // carries that motion on as decaying momentum after release, so a
+    // flick keeps spinning briefly instead of stopping dead, and eases
+    // back into the slow idle spin once it's died down.
+    this.toyDragging = false;
+    this._toyLastDragYaw = 0;
+    this._toySpinVelocityYaw = 0;
     this._binBounceAmount = 0;
     this._rattlePlaying = false;
     this._time = 0;
 
-    this._hemiBaseSky = new THREE.Color(0xffffff);
-    this._keyBaseColor = new THREE.Color(0xfff6e8);
-    this._hemiBaseIntensity = 0.65;
-    this._keyBaseIntensity = 1.1;
-    this._fillBaseIntensity = 0.3;
+    this._hemiBaseSky = new THREE.Color(0x97b7ff);
+    this._keyBaseColor = new THREE.Color(0xffd0f1);
+    this._hemiBaseIntensity = 0.97;
+    this._keyBaseIntensity = 0.51;
+    this._fillBaseIntensity = 1.21;
+    this._rimBaseIntensity = 0.93;
     this._glowAmount = 0;
     this._glowTarget = 0;
 
@@ -219,12 +580,22 @@ export class GachaponMachine {
     this._beatPositionTimestampMs = 0;
     this._beatPulseGateAmount = 0;
 
+    // The pulse's color when no toy is active (see activeToyIndex above) —
+    // once a toy is set, the pulse tints to that toy's own color instead.
+    // _backlightColorScratch is just a reusable THREE.Color to read a
+    // toy's color into each frame without allocating a new one.
+    this._backlightIdleColor = new THREE.Color(0xffffff);
+    this._backlightColorScratch = new THREE.Color();
+    this._backlightIntensityScale = 2.9;
+    this._backlightOpacityScale = 0.24;
+
     this._initScene();
     this._initMachine();
-    this._initKnob();
+    this._initSideMachines();
     this._initParticles();
     this._initBacklight();
     this._initPointerHandling();
+    if (this.options.enableDebugGui) this._initLightingGUI();
 
     this._setState("idle");
 
@@ -243,8 +614,14 @@ export class GachaponMachine {
 
   _initScene() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(SCENE_BACKGROUND);
+    this.scene.background = makeBackdropTexture();
+    // Fades the far reach of the floor plane into the backdrop instead of
+    // letting its edge show as a hard line — near sits well past the
+    // machine so the product itself is never touched by it.
+    this.scene.fog = new THREE.Fog(BACKDROP_SHADOW, 10, 22);
 
+    // Framed on the real machine only — the two flanking machines are
+    // decoration and don't need to fully fit in shot.
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
     const targetY = MACHINE_TOTAL_HEIGHT * 0.52;
     this.camera.position.set(0, targetY + 0.3, 6.4);
@@ -256,229 +633,86 @@ export class GachaponMachine {
     this.renderer.shadowMap.type = THREE.VSMShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.1;
     this.container.appendChild(this.renderer.domElement);
 
-    // Soft overall fill (sky/ground) plus a shadow-casting key light and a
-    // gentle opposite-side fill light for a clean studio-product look.
-    this.ambientLight = new THREE.HemisphereLight(this._hemiBaseSky, 0xd9d2c4, this._hemiBaseIntensity);
+    // A small procedural room, prefiltered into an IBL environment. This
+    // is what actually makes the clearcoat plastic and the transmissive
+    // glass read correctly — without it they have nothing to reflect or
+    // refract and fall back to looking flat/matte regardless of their
+    // material settings.
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.06;
+    pmremGenerator.dispose();
+
+    // Three-point-ish studio setup: a warm key casts the main shadow, a
+    // cool fill opens up the shadow side without flattening it, and a
+    // dim rim light from behind kicks a highlight along the machine's
+    // silhouette for separation from the background.
+    this.ambientLight = new THREE.HemisphereLight(this._hemiBaseSky, 0x8fd9a1, this._hemiBaseIntensity);
     this.scene.add(this.ambientLight);
 
     this.keyLight = new THREE.DirectionalLight(this._keyBaseColor, this._keyBaseIntensity);
-    this.keyLight.position.set(2.6, 5.2, 4.2);
+    this.keyLight.position.set(3.3, 3.9, 4.2);
     this.keyLight.target.position.set(0, BODY_CENTER_Y, 0);
     this.keyLight.castShadow = true;
-    this.keyLight.shadow.mapSize.set(1024, 1024);
-    this.keyLight.shadow.camera.left = -2.4;
-    this.keyLight.shadow.camera.right = 2.4;
-    this.keyLight.shadow.camera.top = 5.2;
-    this.keyLight.shadow.camera.bottom = -0.5;
+    this.keyLight.shadow.mapSize.set(2048, 2048);
+    // Wide enough to cover the sidebar toy display off to the +X side of
+    // the real machine, and both flanking machines out at
+    // ±SIDE_MACHINE_OFFSET — tighter bounds clipped their shadows right
+    // at the edge of the frustum.
+    this.keyLight.shadow.camera.left = -3.6;
+    this.keyLight.shadow.camera.right = 3.6;
+    this.keyLight.shadow.camera.top = 6.5;
+    this.keyLight.shadow.camera.bottom = -2;
     this.keyLight.shadow.camera.near = 0.5;
     this.keyLight.shadow.camera.far = 13;
     this.keyLight.shadow.bias = -0.002;
     this.scene.add(this.keyLight, this.keyLight.target);
 
-    this.fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    this.fillLight.position.set(-3, 2.6, 2.2);
+    this.fillLight = new THREE.DirectionalLight(0x9fc3ff, this._fillBaseIntensity);
+    this.fillLight.position.set(-1.4, 2.6, 0.3);
     this.scene.add(this.fillLight);
+
+    this.rimLight = new THREE.DirectionalLight(0xbcd6ff, this._rimBaseIntensity);
+    this.rimLight.position.set(-2.2, 4.3, -2.6);
+    this.rimLight.target.position.set(0, BODY_CENTER_Y, 0);
+    this.scene.add(this.rimLight, this.rimLight.target);
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
-      new THREE.MeshStandardMaterial({ color: 0x1e1e24, roughness: 0.95 })
+      new THREE.MeshStandardMaterial({ map: makeFloorTexture(), roughness: 0.95 })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
   }
 
+  // The real, interactive machine: white plastic, printed badge/pillar,
+  // colored knob rings, toy-colored bin capsules.
   _initMachine() {
-    this.machineGroup = new THREE.Group();
+    const { group, knobGroup, knobHitTarget, dispenserAnchor, dispenserDropStart, binCapsules } = buildMachine();
+    this.machineGroup = group;
+    this.knobGroup = knobGroup;
+    this.knobHitTarget = knobHitTarget;
+    this.dispenserAnchor = dispenserAnchor;
+    this.dispenserDropStart = dispenserDropStart;
+    this.binCapsules = binCapsules;
     this.scene.add(this.machineGroup);
-
-    const white = 0xf4f4f2;
-
-    const pedestal = new THREE.Mesh(
-      new THREE.BoxGeometry(PEDESTAL.width, PEDESTAL.height, PEDESTAL.depth),
-      new THREE.MeshStandardMaterial({ color: white, roughness: 0.6 })
-    );
-    pedestal.position.y = PEDESTAL.height / 2;
-    pedestal.castShadow = true;
-    pedestal.receiveShadow = true;
-    this.machineGroup.add(pedestal);
-
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(BODY.width, BODY.height, BODY.depth),
-      new THREE.MeshStandardMaterial({ color: white, roughness: 0.5 })
-    );
-    body.position.y = BODY_CENTER_Y;
-    body.castShadow = true;
-    body.receiveShadow = true;
-    this.machineGroup.add(body);
-
-    const bin = new THREE.Mesh(
-      new THREE.BoxGeometry(BIN.width, BIN.height, BIN.depth),
-      new THREE.MeshPhysicalMaterial({
-        color: 0xdff1fb,
-        transparent: true,
-        opacity: 0.25,
-        roughness: 0.08,
-        transmission: 0.88,
-        thickness: 0.4,
-      })
-    );
-    bin.position.y = BIN_CENTER_Y;
-    this.machineGroup.add(bin);
-
-    const badge = new THREE.Mesh(
-      new THREE.BoxGeometry(BADGE.width, BADGE.height, BADGE.depth),
-      new THREE.MeshStandardMaterial({ map: makeBadgeTexture(), color: white, roughness: 0.6 })
-    );
-    badge.position.y = BADGE_CENTER_Y;
-    badge.castShadow = true;
-    this.machineGroup.add(badge);
-
-    const sidePillar = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, BODY.height + BIN.height, 1.0),
-      new THREE.MeshStandardMaterial({ map: makeSidePillarTexture(), roughness: 0.5 })
-    );
-    sidePillar.position.set(BODY.width / 2 + 0.06, BODY_CENTER_Y + BIN.height / 2, 0);
-    sidePillar.castShadow = true;
-    this.machineGroup.add(sidePillar);
-
-    const coinSlot = new THREE.Mesh(
-      new THREE.BoxGeometry(0.14, 0.32, 0.04),
-      new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.7 })
-    );
-    coinSlot.position.set(BODY.width * 0.28, COIN_SLOT_Y, FRONT_Z + 0.02);
-    this.machineGroup.add(coinSlot);
-
-    // Dispensing window: the "bottom hole" the prize capsule appears in.
-    const windowFrame = new THREE.Mesh(
-      new THREE.BoxGeometry(0.56, 0.5, 0.3),
-      new THREE.MeshStandardMaterial({ color: white, roughness: 0.6 })
-    );
-    windowFrame.position.set(0, WINDOW_Y, FRONT_Z - 0.1);
-    this.machineGroup.add(windowFrame);
-
-    const windowHole = new THREE.Mesh(
-      new THREE.BoxGeometry(0.46, 0.4, 0.26),
-      new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.9 })
-    );
-    windowHole.position.set(0, WINDOW_Y, FRONT_Z - 0.07);
-    this.machineGroup.add(windowHole);
-
-    // Pulled well forward of FRONT_Z (by more than the prize capsule's
-    // own radius) so it sits clear in front of the body instead of
-    // clipping back into it.
-    const dispenserZ = FRONT_Z + 0.36;
-
-    this.dispenserAnchor = new THREE.Object3D();
-    this.dispenserAnchor.position.set(0, WINDOW_Y + 0.02, dispenserZ);
-    this.machineGroup.add(this.dispenserAnchor);
-
-    this.dispenserDropStart = new THREE.Object3D();
-    this.dispenserDropStart.position.set(0, WINDOW_Y + 0.55, dispenserZ);
-    this.machineGroup.add(this.dispenserDropStart);
-
-    this._initBinCapsules();
   }
 
-  // Densely packs the clear bin with resting capsules (an elliptical
-  // footprint with a little random dropout) so it reads as full rather
-  // than a handful of balls floating in the glass.
-  _initBinCapsules() {
-    this.binCapsules = new THREE.Group();
-
-    const radius = 0.14;
-    const spacing = radius * 1.65;
-    const marginXZ = 0.14;
-    const halfW = BIN.width / 2 - marginXZ;
-    const halfD = BIN.depth / 2 - marginXZ;
-    const fillBottom = BIN_CENTER_Y - BIN.height / 2 + 0.18;
-    const fillTop = BIN_CENTER_Y + BIN.height / 2 - 0.4;
-
-    let colorCursor = 0;
-    for (let y = fillBottom; y <= fillTop; y += spacing * 0.9) {
-      for (let x = -halfW; x <= halfW; x += spacing) {
-        for (let z = -halfD; z <= halfD; z += spacing) {
-          const nx = x / halfW;
-          const nz = z / halfD;
-          if (nx * nx + nz * nz > 0.92) continue;
-          if (Math.random() > 0.88) continue;
-
-          const toy = TOYS[colorCursor % TOYS.length];
-          colorCursor += 1;
-
-          // Same two-tone capsule construction as the prize capsule, so
-          // the ones resting in the bin actually match the one that drops.
-          const { group: capsule } = makeCapsuleHalves(
-            toy.color,
-            0xf4f4f2,
-            radius * (0.85 + Math.random() * 0.25),
-            { castShadow: false }
-          );
-          capsule.position.set(
-            x + (Math.random() - 0.5) * spacing * 0.4,
-            y + (Math.random() - 0.5) * spacing * 0.4,
-            z + (Math.random() - 0.5) * spacing * 0.4
-          );
-          capsule.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-          capsule.userData.basePosition = capsule.position.clone();
-          capsule.userData.bouncePhase = Math.random() * Math.PI * 2;
-          this.binCapsules.add(capsule);
-        }
-      }
-    }
-
-    this.machineGroup.add(this.binCapsules);
-  }
-
-  // Front-facing dial: flat 2D shapes in the group's local XY plane, which
-  // already faces the camera since the group itself isn't rotated.
-  _initKnob() {
-    this.knobGroup = new THREE.Group();
-    this.knobGroup.position.set(0, KNOB_Y, FRONT_Z + 0.01);
-    this.machineGroup.add(this.knobGroup);
-
-    const base = new THREE.Mesh(
-      new THREE.CircleGeometry(0.42, 32),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
-    );
-    this.knobGroup.add(base);
-    this.knobHitTarget = base;
-
-    const outerRing = new THREE.Mesh(
-      new THREE.RingGeometry(0.34, 0.4, 32),
-      new THREE.MeshStandardMaterial({ color: 0x3aa6e0, roughness: 0.4 })
-    );
-    outerRing.position.z = 0.002;
-    this.knobGroup.add(outerRing);
-
-    const innerRing = new THREE.Mesh(
-      new THREE.RingGeometry(0.24, 0.3, 32),
-      new THREE.MeshStandardMaterial({ color: 0xf2d06e, roughness: 0.4 })
-    );
-    innerRing.position.z = 0.003;
-    this.knobGroup.add(innerRing);
-
-    const pointerShape = new THREE.Shape();
-    pointerShape.moveTo(-0.38, 0.05);
-    pointerShape.lineTo(-0.38, -0.05);
-    pointerShape.lineTo(-0.2, 0);
-    pointerShape.closePath();
-    const pointer = new THREE.Mesh(
-      new THREE.ShapeGeometry(pointerShape),
-      new THREE.MeshStandardMaterial({ color: 0xe0455b, roughness: 0.4 })
-    );
-    pointer.position.z = 0.004;
-    this.knobGroup.add(pointer);
-
-    const hub = new THREE.Mesh(
-      new THREE.CircleGeometry(0.06, 16),
-      new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3 })
-    );
-    hub.position.z = 0.005;
-    this.knobGroup.add(hub);
+  // Two static, non-interactive copies flanking the real machine — same
+  // geometry and glass, flattened to near-black otherwise (see
+  // buildMachine). Added straight to the scene rather than to
+  // machineGroup, so they don't inherit its spin-sequence shake/bounce.
+  _initSideMachines() {
+    this.sideMachineGroups = [-1, 1].map((side) => {
+      const { group } = buildMachine({ accentColor: NEAR_BLACK });
+      group.position.x = side * SIDE_MACHINE_OFFSET;
+      this.scene.add(group);
+      return group;
+    });
   }
 
   // A reusable pool of star sprites for the reveal's explosive burst,
@@ -520,7 +754,7 @@ export class GachaponMachine {
     const glowTexture = makeGlowTexture();
     const material = new THREE.SpriteMaterial({
       map: glowTexture,
-      color: BACKLIGHT_COLOR,
+      color: this._backlightIdleColor,
       transparent: true,
       opacity: 0,
       depthWrite: false,
@@ -528,12 +762,60 @@ export class GachaponMachine {
     });
     this.backlightSprite = new THREE.Sprite(material);
     this.backlightSprite.scale.set(3.6, 3.6, 1);
-    this.backlightSprite.position.set(0, MACHINE_TOTAL_HEIGHT * 0.45, -1.4);
     this.scene.add(this.backlightSprite);
 
-    this.backlightPointLight = new THREE.PointLight(BACKLIGHT_COLOR, 0, 6);
-    this.backlightPointLight.position.set(0, MACHINE_TOTAL_HEIGHT * 0.45, -1.0);
+    this.backlightPointLight = new THREE.PointLight(this._backlightIdleColor, 0, 6);
+    this.backlightPointLight.position.set(-0.1, 2.4, -0.1);
     this.scene.add(this.backlightPointLight);
+  }
+
+  // A lil-gui panel for hand-tuning the scene's lighting, for dev/visual
+  // work only (see the enableDebugGui option) — never wired up for the
+  // real plugin UI. Binds directly to the base intensity/color fields that
+  // _updateGlow reads every frame (rather than to light.intensity/.color
+  // themselves), since that function overwrites those each frame.
+  _initLightingGUI() {
+    this.gui = new GUI({ title: "Lighting" });
+
+    const key = this.gui.addFolder("Key light");
+    key.add(this, "_keyBaseIntensity", 0, 4, 0.01).name("Intensity");
+    bindColor(key, this._keyBaseColor, "Color");
+    key.add(this.keyLight.position, "x", -8, 8, 0.1);
+    key.add(this.keyLight.position, "y", 0, 10, 0.1);
+    key.add(this.keyLight.position, "z", -8, 8, 0.1);
+
+    const fill = this.gui.addFolder("Fill light");
+    fill.add(this, "_fillBaseIntensity", 0, 2, 0.01).name("Intensity");
+    bindColor(fill, this.fillLight.color, "Color");
+    fill.add(this.fillLight.position, "x", -8, 8, 0.1);
+    fill.add(this.fillLight.position, "y", 0, 10, 0.1);
+    fill.add(this.fillLight.position, "z", -8, 8, 0.1);
+
+    const rim = this.gui.addFolder("Rim light");
+    rim.add(this, "_rimBaseIntensity", 0, 3, 0.01).name("Intensity");
+    bindColor(rim, this.rimLight.color, "Color");
+    rim.add(this.rimLight.position, "x", -8, 8, 0.1);
+    rim.add(this.rimLight.position, "y", 0, 10, 0.1);
+    rim.add(this.rimLight.position, "z", -8, 8, 0.1);
+
+    const ambient = this.gui.addFolder("Ambient (hemisphere)");
+    ambient.add(this, "_hemiBaseIntensity", 0, 3, 0.01).name("Intensity");
+    bindColor(ambient, this._hemiBaseSky, "Sky color");
+    bindColor(ambient, this.ambientLight.groundColor, "Ground color");
+
+    const pulse = this.gui.addFolder("Beat pulse");
+    pulse.add(this, "_backlightIntensityScale", 0, 5, 0.01).name("Intensity");
+    pulse.add(this, "_backlightOpacityScale", 0, 2, 0.01).name("Glow opacity");
+    bindColor(pulse, this._backlightIdleColor, "Idle color (no toy)");
+    pulse.add(this.backlightPointLight.position, "x", -8, 8, 0.1);
+    pulse.add(this.backlightPointLight.position, "y", 0, 10, 0.1);
+    pulse.add(this.backlightPointLight.position, "z", -8, 8, 0.1);
+
+    const env = this.gui.addFolder("Environment / exposure");
+    env.add(this.scene, "environmentIntensity", 0, 2, 0.01).name("Env intensity");
+    env.add(this.renderer, "toneMappingExposure", 0, 3, 0.01).name("Exposure");
+
+    this.gui.close();
   }
 
   // Called from the WebView bridge whenever the host's transport/tempo
@@ -560,8 +842,25 @@ export class GachaponMachine {
       brightness = pulseShape * this._beatPulseGateAmount;
     }
 
-    this.backlightSprite.material.opacity = brightness * 0.45;
-    this.backlightPointLight.intensity = brightness * 1.4;
+    // Tints to the active toy's own color once one is set, falling back
+    // to the idle color (white by default) when none is — eased rather
+    // than snapped, so a mid-pulse toy change doesn't jump instantly.
+    const targetColor =
+      this.activeToyIndex === null
+        ? this._backlightIdleColor
+        : this._backlightColorScratch.setHex(getToy(this.activeToyIndex).color);
+    const colorLerp = Math.min(1, dt * 5);
+    this.backlightSprite.material.color.lerp(targetColor, colorLerp);
+    this.backlightPointLight.color.lerp(targetColor, colorLerp);
+
+    // The glow sprite reads slightly further back than the point light
+    // itself, so it tracks the light's (GUI-adjustable) position rather
+    // than having its own separate, easy-to-forget position to tune.
+    this.backlightSprite.position.copy(this.backlightPointLight.position);
+    this.backlightSprite.position.z -= 0.4;
+
+    this.backlightSprite.material.opacity = brightness * this._backlightOpacityScale;
+    this.backlightPointLight.intensity = brightness * this._backlightIntensityScale;
   }
 
   _burstParticles(origin) {
@@ -631,47 +930,83 @@ export class GachaponMachine {
     };
 
     dom.addEventListener("pointerdown", (event) => {
-      if (this.state !== "idle") return;
-
       toPointer(event);
       this.raycaster.setFromCamera(this.pointer, this.camera);
-      const hits = this.raycaster.intersectObject(this.knobHitTarget, false);
-      if (hits.length === 0) return;
 
-      this.dragging = true;
-      this.accumulatedRotation = 0;
-      this.dragStartAngle = Math.atan2(this.pointer.y, this.pointer.x);
-      dom.setPointerCapture(event.pointerId);
+      // The knob can only be grabbed between spins — the toy, on the
+      // other hand, is just a standalone display with nothing to
+      // interrupt, so it's spinnable regardless of machine state.
+      if (this.state === "idle") {
+        const knobHits = this.raycaster.intersectObject(this.knobHitTarget, false);
+        if (knobHits.length > 0) {
+          this.dragging = true;
+          this.accumulatedRotation = 0;
+          this.dragStartAngle = Math.atan2(this.pointer.y, this.pointer.x);
+          dom.setPointerCapture(event.pointerId);
+          return;
+        }
+      }
+
+      if (this.sidebarToyMesh) {
+        const toyHits = this.raycaster.intersectObject(this.sidebarToyMesh, false);
+        if (toyHits.length > 0) {
+          this.toyDragging = true;
+          this._toySpinVelocityYaw = 0;
+          dom.setPointerCapture(event.pointerId);
+        }
+      }
     });
 
     dom.addEventListener("pointermove", (event) => {
-      if (!this.dragging) return;
+      if (this.dragging) {
+        toPointer(event);
+        const angle = Math.atan2(this.pointer.y, this.pointer.x);
+        let delta = angle - this.dragStartAngle;
+        while (delta > Math.PI) delta -= Math.PI * 2;
+        while (delta < -Math.PI) delta += Math.PI * 2;
+        this.dragStartAngle = angle;
 
-      toPointer(event);
-      const angle = Math.atan2(this.pointer.y, this.pointer.x);
-      let delta = angle - this.dragStartAngle;
-      while (delta > Math.PI) delta -= Math.PI * 2;
-      while (delta < -Math.PI) delta += Math.PI * 2;
-      this.dragStartAngle = angle;
+        // The dial is a one-way ratchet, like a real gashapon crank: only
+        // clockwise motion (negative delta, in our rotation.z convention)
+        // turns it. Counter-clockwise motion is simply ignored rather than
+        // spinning it backward or resetting progress.
+        if (delta >= 0) return;
 
-      // The dial is a one-way ratchet, like a real gashapon crank: only
-      // clockwise motion (negative delta, in our rotation.z convention)
-      // turns it. Counter-clockwise motion is simply ignored rather than
-      // spinning it backward or resetting progress.
-      if (delta >= 0) return;
+        this.accumulatedRotation += delta;
+        this.knobAngle += delta;
 
-      this.accumulatedRotation += delta;
-      this.knobAngle += delta;
+        const fullSpinThreshold = Math.PI * 1.6;
+        if (-this.accumulatedRotation >= fullSpinThreshold) {
+          this.dragging = false;
+          this._beginSpin();
+        }
+        return;
+      }
 
-      const fullSpinThreshold = Math.PI * 1.6;
-      if (-this.accumulatedRotation >= fullSpinThreshold) {
-        this.dragging = false;
-        this._beginSpin();
+      if (this.toyDragging && this.sidebarToyMesh) {
+        // Horizontal movement only — locked to yaw (spinning like a
+        // figure on a turntable) rather than a free trackball, so
+        // vertical pointer movement is simply ignored.
+        // movementX is the pointer's horizontal delta since the last
+        // event, in CSS pixels — simpler than tracking a previous
+        // position ourselves, and resolution-independent the same way.
+        const yaw = event.movementX * TOY_DRAG_SENSITIVITY;
+        this.sidebarToyMesh.rotation.y += yaw;
+        this._toyLastDragYaw = yaw;
       }
     });
 
     const endDrag = () => {
       this.dragging = false;
+
+      if (this.toyDragging) {
+        this.toyDragging = false;
+        // Carries the last instant's drag motion on as momentum, as if
+        // flicked — roughly converting "radians moved on the last event"
+        // into "radians per second" by assuming events land close to
+        // every frame while actively dragging.
+        this._toySpinVelocityYaw = this._toyLastDragYaw * TOY_SPIN_MOMENTUM_PER_SECOND;
+      }
     };
     dom.addEventListener("pointerup", endDrag);
     dom.addEventListener("pointercancel", endDrag);
@@ -736,21 +1071,32 @@ export class GachaponMachine {
   // well before this is called.
   showSidebarToy(toyIndex) {
     this._clearSidebarToy();
+    this.activeToyIndex = toyIndex;
 
-    const mesh = makeToyMesh(toyIndex);
-    mesh.material.transparent = true;
-    mesh.material.opacity = 0;
-    mesh.scale.setScalar(0.22);
-    mesh.position.set(BODY.width / 2 + 0.75, BODY_CENTER_Y, FRONT_Z * 0.2);
-    this.machineGroup.add(mesh);
+    // The shared toy model may still be loading (main.js kicks that off
+    // but deliberately doesn't wait on it for anything else) — wait for
+    // it here instead of assuming it's ready. By the time this resolves,
+    // activeToyIndex may have moved on again (another reveal, a reset),
+    // so only build the mesh if this call is still the current one.
+    preloadKeshiModel().then(() => {
+      if (this._disposed || this.activeToyIndex !== toyIndex) return;
 
-    this.sidebarToyMesh = mesh;
-    this.sidebarFade = { from: 0, to: 1, duration: 0.6, elapsed: 0, removeOnComplete: false };
+      const mesh = makeToyMesh(toyIndex);
+      mesh.material.transparent = true;
+      mesh.material.opacity = 0;
+      mesh.scale.setScalar(SIDEBAR_TOY_SCALE);
+      mesh.position.set(SIDEBAR_TOY_X, BODY_CENTER_Y, SIDEBAR_TOY_Z);
+      this.machineGroup.add(mesh);
+
+      this.sidebarToyMesh = mesh;
+      this.sidebarFade = { from: 0, to: 1, duration: 0.6, elapsed: 0, removeOnComplete: false };
+    });
   }
 
   // Fades out the current sidebar toy display, if any.
   hideSidebarToy() {
     if (!this.sidebarToyMesh) return;
+    this.activeToyIndex = null;
     this.sidebarFade = {
       from: this.sidebarToyMesh.material.opacity,
       to: 0,
@@ -771,8 +1117,20 @@ export class GachaponMachine {
   }
 
   _updateSidebarToy(dt) {
-    if (this.sidebarToyMesh) {
-      this.sidebarToyMesh.rotation.y += dt * 0.3;
+    if (this.sidebarToyMesh && !this.toyDragging) {
+      // While actively dragging, rotation is driven directly from
+      // pointer movement in _initPointerHandling instead — this only
+      // runs once released, decaying the carried-over spin velocity and
+      // blending back into the slow idle spin as it dies down, rather
+      // than snapping straight back to it.
+      const decay = Math.max(0, 1 - dt * 2.5);
+      this._toySpinVelocityYaw *= decay;
+
+      const idleYawSpeed = 0.3;
+      const settledness = Math.min(Math.abs(this._toySpinVelocityYaw) / 0.4, 1);
+      const yawSpeed = this._toySpinVelocityYaw + idleYawSpeed * (1 - settledness);
+
+      this.sidebarToyMesh.rotation.y += yawSpeed * dt;
     }
 
     if (!this.sidebarFade || !this.sidebarToyMesh) return;
@@ -880,6 +1238,7 @@ export class GachaponMachine {
     this.keyLight.intensity = (this._keyBaseIntensity + this._glowAmount * 0.4) * this._activeAmount;
 
     this.fillLight.intensity = this._fillBaseIntensity * this._activeAmount;
+    this.rimLight.intensity = this._rimBaseIntensity * this._activeAmount;
   }
 
   _updateShake(dt) {
@@ -1027,7 +1386,9 @@ export class GachaponMachine {
   }
 
   dispose() {
+    this._disposed = true;
     window.removeEventListener("resize", this._onResize);
+    this.gui?.destroy();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

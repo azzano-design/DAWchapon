@@ -2,6 +2,7 @@ import * as Juce from "@juce-framework/webview";
 
 import { GachaponMachine } from "./scene/GachaponMachine.js";
 import { ToyIcon } from "./scene/ToyIcon.js";
+import { preloadKeshiModel } from "./scene/toyMesh.js";
 import { getToy, TOYS } from "./toyData.js";
 import { playChime, playRumble, startRattle, stopRattle, unlockAudio } from "./sound.js";
 
@@ -16,6 +17,13 @@ import { playChime, playRumble, startRattle, stopRattle, unlockAudio } from "./s
 // rather than relying only on that check.
 const FORCE_STANDALONE_DEMO = false;
 const canUsePlugin = !FORCE_STANDALONE_DEMO && typeof window.__JUCE__ !== "undefined";
+
+// Shows the lil-gui lighting panel for hand-tuning lights/exposure during
+// visual work. Deliberately independent of canUsePlugin above — that stays
+// true even in a plain browser (see the note on it), so gating the GUI on
+// "!canUsePlugin" would almost never actually show it. Flip to false
+// before shipping a build you don't want this panel in.
+const SHOW_LIGHTING_GUI = true;
 
 const statusFooter = document.querySelector("#status-footer");
 const marqueeTexts = statusFooter.querySelectorAll(".marquee-text");
@@ -115,6 +123,15 @@ function pickNextStandaloneToy() {
   return next;
 }
 
+// Fire-and-forget: starts the (sizeable) toy model loading immediately,
+// in parallel with everything below, so it's as ready as possible by the
+// time a toy actually needs to be shown. Deliberately NOT awaited here —
+// nothing about the machine itself, or any plugin event wiring (playback
+// sync, host automation, reset), should ever be gated behind this load.
+// GachaponMachine.showSidebarToy() and ToyIcon.show() each await it
+// internally, right before they actually need the geometry.
+preloadKeshiModel();
+
 const machine = new GachaponMachine(document.getElementById("scene-container"), {
   onSpinRequested: () => {
     unlockAudio();
@@ -145,6 +162,8 @@ const machine = new GachaponMachine(document.getElementById("scene-container"), 
     }
   },
   onReveal: (toyIndex) => showRevealCard(toyIndex),
+}, {
+  enableDebugGui: SHOW_LIGHTING_GUI,
 });
 
 resetButton.addEventListener("click", handleResetClick);
