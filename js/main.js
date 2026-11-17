@@ -1,5 +1,5 @@
 // Vendored (see js/vendor/) rather than imported across folders, so this
-// page doesn't depend on files outside landing-page/ — see ToyIcon.js's own
+// page doesn't depend on files outside this folder — see ToyIcon.js's own
 // header comment for the full reasoning.
 import { GachaponMachine } from "./vendor/GachaponMachine.js";
 import { ToyIcon } from "./vendor/ToyIcon.js";
@@ -7,9 +7,9 @@ import { preloadKeshiModel } from "./vendor/toyMesh.js";
 import { playChime, playRumble, startRattle, stopRattle, unlockAudio } from "./vendor/sound.js";
 import { TOYS, VARIANTS, pickVariant } from "./toyData.js";
 
-// Mirrors WebUI/src/toyData.js (names/colors/taglines) plus longer copy for
+// Mirrors plugin/WebUI/src/toyData.js (names/colors/taglines) plus longer copy for
 // the comparison grid, written from the real per-toy DSP comments in
-// Source/Toys/*Dsp.cpp.
+// plugin/Source/Toys/*Dsp.cpp.
 const TOY_COPY = [
   {
     name: "Robo-Pal",
@@ -110,7 +110,7 @@ let activeToyIndex = null;
 let activeVariant = null;
 let pluginIsOn = false;
 
-// Mirrors WebUI/src/main.js's pickNextStandaloneToy/pickNextStandaloneSpin:
+// Mirrors plugin/WebUI/src/main.js's pickNextStandaloneToy/pickNextStandaloneSpin:
 // excludes both the currently active toy and whichever was active right
 // before it, so a short run never repeats a toy within a 2-pull window.
 let currentPickToy = 0;
@@ -217,7 +217,7 @@ const machine = new GachaponMachine(
     onGlowChange: (active) => goldGlow.classList.toggle("active", active),
     onToyShown: (toyIndex, variant) => {
       // The moment the real plugin's effect would actually take over — see
-      // the matching comment in WebUI/src/main.js. This is what the audio
+      // the matching comment in plugin/WebUI/src/main.js. This is what the audio
       // demo below is synced to, not onReveal.
       previousPickToy = currentPickToy;
       currentPickToy = toyIndex;

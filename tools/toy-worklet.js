@@ -7,7 +7,7 @@
 // DelayNode instead — see audio-engine.js for how the two are combined.
 //
 // This is a simplified, browser-side approximation of the real plugin's C++
-// DSP (see Source/Toys/*.cpp) for demo purposes, not a byte-for-byte port.
+// DSP (see plugin/Source/Toys/*.cpp) for demo purposes, not a byte-for-byte port.
 class ToyProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [

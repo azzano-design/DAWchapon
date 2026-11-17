@@ -1,4 +1,4 @@
-// Vendored verbatim from WebUI/src/sound.js (see GachaponMachine.js above
+// Vendored verbatim from plugin/WebUI/src/sound.js (see GachaponMachine.js above
 // for why) — the mechanical sound effects (rumble/chime/rattle) for the
 // knob and capsule, all synthesized in-browser with no external assets.
 // Re-copy from there if it changes.

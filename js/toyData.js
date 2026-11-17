@@ -1,4 +1,4 @@
-// Vendored verbatim from WebUI/src/toyData.js (see js/vendor/ToyIcon.js for
+// Vendored verbatim from plugin/WebUI/src/toyData.js (see js/vendor/ToyIcon.js for
 // why). Re-copy from there if it changes.
 export const TOYS = [
   { index: 0, name: "Robo-Pal", color: 0x8a94a6, effect: "Turns your sound robotic" },

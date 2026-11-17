@@ -1,4 +1,4 @@
-// Vendored verbatim from WebUI/src/scene/GachaponMachine.js so the landing
+// Vendored verbatim from plugin/WebUI/src/scene/GachaponMachine.js so the landing
 // page's hero uses the exact same 3D gachapon machine (model, materials,
 // lighting, knob/spin mechanics) as the real plugin, inlined directly
 // rather than through an iframe. Re-copy from there if it changes.

@@ -1,5 +1,5 @@
-// Vendored from WebUI/src/scene/toyMesh.js (see ToyIcon.js above for why),
-// with one deliberate difference: the real WebUI/src/scene/toyMesh.js
+// Vendored from plugin/WebUI/src/scene/toyMesh.js (see ToyIcon.js above for why),
+// with one deliberate difference: the real plugin/WebUI/src/scene/toyMesh.js
 // hardcodes KESHI_MODEL_URL as "/models/keshi.glb" — resolved against
 // whatever the *web server's own root* is, not this file's location. That
 // convention only happens to be correct there because Vite always serves

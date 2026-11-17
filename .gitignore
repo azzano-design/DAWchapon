@@ -2,8 +2,8 @@ build/
 build-release/
 cmake-build*/
 
-WebUI/node_modules/
-WebUI/dist/
+plugin/WebUI/node_modules/
+plugin/WebUI/dist/
 
 .DS_Store
 *.user
