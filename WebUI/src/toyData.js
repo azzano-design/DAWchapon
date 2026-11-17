@@ -9,3 +9,35 @@ export const TOYS = [
 export function getToy(index) {
   return TOYS[((index % TOYS.length) + TOYS.length) % TOYS.length];
 }
+
+// Every toy can be pulled in three finishes. Keep these string ids in sync
+// with ToyRegistry::variantId on the backend — they're what "variant"
+// fields on native-function results and events actually contain.
+export const VARIANTS = {
+  ORIGINAL: "original",
+  SILVER: "silver",
+  GOLD: "gold",
+};
+
+// Pull-rate weights, independent of which toy is picked alongside them —
+// Gold is the rarest, Silver uncommon, Original the usual pull. Only used
+// by the standalone (no-plugin-backend) demo fallback in main.js; the real
+// backend has its own authoritative copy in ToyRegistry::variantWeights,
+// which these are meant to mirror.
+export const VARIANT_WEIGHTS = {
+  [VARIANTS.ORIGINAL]: 85,
+  [VARIANTS.SILVER]: 12,
+  [VARIANTS.GOLD]: 3,
+};
+
+export function pickVariant() {
+  const total = Object.values(VARIANT_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
+  let roll = Math.random() * total;
+
+  for (const [variant, weight] of Object.entries(VARIANT_WEIGHTS)) {
+    roll -= weight;
+    if (roll < 0) return variant;
+  }
+
+  return VARIANTS.ORIGINAL;
+}

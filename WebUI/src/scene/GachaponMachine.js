@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import GUI from "lil-gui";
 
-import { getToy, TOYS } from "../toyData.js";
+import { getToy, TOYS, VARIANTS } from "../toyData.js";
 import { makeToyMesh, preloadKeshiModel } from "./toyMesh.js";
 
 // Machine proportions (world units), front panel centered on local X=0,
@@ -64,6 +64,11 @@ const SIDEBAR_TOY_Z = 0.9;
 // Radians of toy rotation per CSS pixel of pointer movement while
 // dragging it.
 const TOY_DRAG_SENSITIVITY = 0.01;
+// Star-burst size for a normal reveal; a Silver/Gold reveal uses the full,
+// doubled pool instead (see _burstParticles) — so the pool itself has to
+// be sized for the doubled case up front.
+const PARTICLE_BURST_COUNT = 260;
+const PARTICLE_POOL_COUNT = PARTICLE_BURST_COUNT * 2;
 // Converts "radians moved on the drag's last pointer event" into
 // "radians per second of carried-over spin" once released — see endDrag
 // in _initPointerHandling.
@@ -541,6 +546,11 @@ export class GachaponMachine {
     // none, which is also what tells the beat-pulse backlight (below) to
     // fall back to its idle color instead of tinting to a toy's color.
     this.activeToyIndex = null;
+    // The variant (see VARIANTS) of that same sidebar toy — purely
+    // cosmetic (drives the mesh's metallic finish in showSidebarToy); the
+    // backlight pulse below always reads activeToyIndex's own base color,
+    // never this, so a Gold red toy still pulses red.
+    this.activeVariant = VARIANTS.ORIGINAL;
     // Lets the user grab the sidebar toy and spin it by hand — locked to
     // horizontal (yaw) only, like spinning a figure on a turntable, rather
     // than a free trackball. While dragging, rotation is driven directly
@@ -570,6 +580,13 @@ export class GachaponMachine {
     // hosts insert plugins enabled by default.
     this._activeAmount = 1;
     this._activeTarget = 1;
+
+    // Separate from _activeAmount above: that one has a 0.06 floor (see
+    // setPluginActive) so the *lighting* dims to near-black rather than
+    // literal black, but the sidebar toy's spin shouldn't carry that same
+    // floor — it should actually stop, not just crawl at 6% speed forever.
+    this._spinActiveAmount = 1;
+    this._spinActiveTarget = 1;
 
     // Beat-synced backlight pulse, driven by host transport/tempo info
     // (see setPlaybackInfo). Free-runs between updates from the backend,
@@ -723,8 +740,7 @@ export class GachaponMachine {
     this.scene.add(this.particleGroup);
 
     this.particles = [];
-    const count = 260;
-    for (let i = 0; i < count; i += 1) {
+    for (let i = 0; i < PARTICLE_POOL_COUNT; i += 1) {
       const material = new THREE.SpriteMaterial({
         map: starTexture,
         color: 0xffffff,
@@ -863,10 +879,25 @@ export class GachaponMachine {
     this.backlightPointLight.intensity = brightness * this._backlightIntensityScale;
   }
 
-  _burstParticles(origin) {
+  // `doubled` (a Silver/Gold reveal) activates the full, doubled particle
+  // pool instead of the normal burst size — see PARTICLE_BURST_COUNT /
+  // PARTICLE_POOL_COUNT above.
+  _burstParticles(origin, doubled = false) {
     const palette = [0xffffff, 0xfff2cc, 0xffe9a8, 0xffd36b, 0xffc93c, 0xffffff];
+    const activeCount = doubled ? PARTICLE_POOL_COUNT : PARTICLE_BURST_COUNT;
 
-    for (const sprite of this.particles) {
+    for (let i = 0; i < this.particles.length; i += 1) {
+      const sprite = this.particles[i];
+
+      if (i >= activeCount) {
+        // Explicitly deactivate anything outside this burst's count, so a
+        // normal reveal right after a doubled one doesn't leave the extra
+        // half still mid-flight from last time.
+        sprite.userData.active = false;
+        sprite.material.opacity = 0;
+        continue;
+      }
+
       const angle = Math.random() * Math.PI * 2;
       // Full-sphere spread (biased slightly upward) rather than a narrow
       // upward fountain, so it reads as a real explosion in all directions.
@@ -1023,7 +1054,7 @@ export class GachaponMachine {
   // capsule opens revealing the toy -> gold glow -> onReveal callback
   // (caller shows the name/effect text). The caller must call dismiss()
   // when that text is hidden, so the capsule/toy disappear in sync.
-  playSpinResult(toyIndex) {
+  playSpinResult({ toyIndex, variant = VARIANTS.ORIGINAL }) {
     this._setState("spinning");
     this._clearPrizeCapsule();
 
@@ -1031,6 +1062,7 @@ export class GachaponMachine {
       phase: "crank",
       elapsed: 0,
       toyIndex,
+      variant,
     };
   }
 
@@ -1042,7 +1074,7 @@ export class GachaponMachine {
   dismiss() {
     if (!this._spin || this._spin.phase !== "revealed") return;
 
-    this.showSidebarToy(this._spin.toyIndex);
+    this.showSidebarToy(this._spin.toyIndex, this._spin.variant);
     this.setGlow(false);
     this.callbacks.onGlowChange(false);
 
@@ -1069,9 +1101,10 @@ export class GachaponMachine {
   // machine. Replaces (without a fade) whatever was there before — in
   // the normal flow hideSidebarToy() has already faded the old one out
   // well before this is called.
-  showSidebarToy(toyIndex) {
+  showSidebarToy(toyIndex, variant = VARIANTS.ORIGINAL) {
     this._clearSidebarToy();
     this.activeToyIndex = toyIndex;
+    this.activeVariant = variant;
 
     // The shared toy model may still be loading (main.js kicks that off
     // but deliberately doesn't wait on it for anything else) — wait for
@@ -1079,9 +1112,9 @@ export class GachaponMachine {
     // activeToyIndex may have moved on again (another reveal, a reset),
     // so only build the mesh if this call is still the current one.
     preloadKeshiModel().then(() => {
-      if (this._disposed || this.activeToyIndex !== toyIndex) return;
+      if (this._disposed || this.activeToyIndex !== toyIndex || this.activeVariant !== variant) return;
 
-      const mesh = makeToyMesh(toyIndex);
+      const mesh = makeToyMesh(toyIndex, variant);
       mesh.material.transparent = true;
       mesh.material.opacity = 0;
       mesh.scale.setScalar(SIDEBAR_TOY_SCALE);
@@ -1097,6 +1130,7 @@ export class GachaponMachine {
   hideSidebarToy() {
     if (!this.sidebarToyMesh) return;
     this.activeToyIndex = null;
+    this.activeVariant = VARIANTS.ORIGINAL;
     this.sidebarFade = {
       from: this.sidebarToyMesh.material.opacity,
       to: 0,
@@ -1130,7 +1164,12 @@ export class GachaponMachine {
       const settledness = Math.min(Math.abs(this._toySpinVelocityYaw) / 0.4, 1);
       const yawSpeed = this._toySpinVelocityYaw + idleYawSpeed * (1 - settledness);
 
-      this.sidebarToyMesh.rotation.y += yawSpeed * dt;
+      // Scaled by _spinActiveAmount — eases fully to a stop (not just a
+      // slow crawl) alongside the lights dimming, and back up to full
+      // speed together with them once the plugin's active again. Uses its
+      // own amount rather than _activeAmount (see its declaration) since
+      // that one has a floor so the lighting stays non-literal-black.
+      this.sidebarToyMesh.rotation.y += yawSpeed * dt * this._spinActiveAmount;
     }
 
     if (!this.sidebarFade || !this.sidebarToyMesh) return;
@@ -1166,10 +1205,12 @@ export class GachaponMachine {
   // still playing.
   setPluginActive(active) {
     this._activeTarget = active ? 1 : 0.06;
+    this._spinActiveTarget = active ? 1 : 0;
   }
 
   _updateActiveDim(dt) {
     this._activeAmount += (this._activeTarget - this._activeAmount) * Math.min(1, dt * 1.6);
+    this._spinActiveAmount += (this._spinActiveTarget - this._spinActiveAmount) * Math.min(1, dt * 1.6);
   }
 
   _animate(nowMs) {
@@ -1329,11 +1370,11 @@ export class GachaponMachine {
         // The reveal (particles/glow/DOM card/sidebar) now carries the
         // "which toy did I get" moment — this is when the real effect
         // should take over, not any earlier.
-        this.callbacks.onToyShown(spin.toyIndex);
+        this.callbacks.onToyShown(spin.toyIndex, spin.variant);
 
         const origin = new THREE.Vector3();
         this.dispenserAnchor.getWorldPosition(origin);
-        this._burstParticles(origin);
+        this._burstParticles(origin, spin.variant !== VARIANTS.ORIGINAL);
 
         this._startCapsuleFall();
       }
@@ -1345,7 +1386,7 @@ export class GachaponMachine {
       if (spin.elapsed >= duration) {
         spin.phase = "revealed";
         spin.elapsed = 0;
-        this.callbacks.onReveal(spin.toyIndex);
+        this.callbacks.onReveal(spin.toyIndex, spin.variant);
       }
       return;
     }

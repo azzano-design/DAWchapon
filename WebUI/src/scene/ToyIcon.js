@@ -1,6 +1,8 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 import { makeToyMesh, preloadKeshiModel } from "./toyMesh.js";
+import { VARIANTS } from "../toyData.js";
 
 // A tiny self-contained Three.js viewport that renders just one toy mesh,
 // slowly rotating — used so the reveal card shows the *actual* 3D toy
@@ -24,7 +26,21 @@ export class ToyIcon {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.1;
     container.appendChild(this.renderer.domElement);
+
+    // Without this, Silver/Gold's metalness-1 finish (see toyMesh.js's
+    // makeMetallicMaterial) has nothing to reflect and renders almost
+    // black under just the two lights below — same RoomEnvironment the
+    // main machine scene uses (see GachaponMachine._initScene), but at a
+    // much higher intensity since there's no three-point studio setup
+    // here to carry the brightness instead, just this one key light.
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.6;
+    pmremGenerator.dispose();
 
     const key = new THREE.DirectionalLight(0xffffff, 1.2);
     key.position.set(2, 3, 3);
@@ -39,7 +55,7 @@ export class ToyIcon {
     requestAnimationFrame(this._animate);
   }
 
-  show(toyIndex) {
+  show(toyIndex, variant = VARIANTS.ORIGINAL) {
     this.clear();
 
     // The shared toy model may still be loading — wait for it instead of
@@ -50,7 +66,7 @@ export class ToyIcon {
     preloadKeshiModel().then(() => {
       if (this._disposed || requestId !== this._showRequestId) return;
 
-      this.mesh = makeToyMesh(toyIndex);
+      this.mesh = makeToyMesh(toyIndex, variant);
       this.mesh.scale.setScalar(0.85);
       this.scene.add(this.mesh);
     });

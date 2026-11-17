@@ -155,6 +155,41 @@
         letter-spacing: 0.01em;
       }
 
+      #reveal-card .reveal-variant {
+        margin-top: 4px;
+        height: 1em;
+        font-family: -apple-system, system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        opacity: 0;
+      }
+
+      #reveal-card .reveal-variant.visible {
+        animation: variant-flicker 1.6s linear infinite;
+      }
+
+      #reveal-card .reveal-variant.gold {
+        color: #ffd36b;
+        text-shadow: 0 0 10px rgba(255, 211, 107, 0.8);
+      }
+
+      #reveal-card .reveal-variant.silver {
+        color: #e3e7ef;
+        text-shadow: 0 0 10px rgba(227, 231, 239, 0.8);
+      }
+
+      @keyframes variant-flicker {
+        0%, 100% { opacity: 1; }
+        8% { opacity: 0.15; }
+        13% { opacity: 1; }
+        21% { opacity: 0.25; }
+        26% { opacity: 1; }
+        58% { opacity: 1; }
+        63% { opacity: 0.1; }
+        68% { opacity: 1; }
+      }
+
       #reveal-card .reveal-effect {
         margin-top: 6px;
         font-size: 14px;
@@ -171,14 +206,15 @@
       <div id="reveal-card">
         <div class="reveal-icon"></div>
         <div class="reveal-name"></div>
+        <div class="reveal-variant"></div>
         <div class="reveal-effect"></div>
       </div>
     </div>
     <div id="status-footer">
-      <div class="marquee-track">
-        <span class="marquee-text"></span>
-        <span class="marquee-text" aria-hidden="true"></span>
-      </div>
+      <!-- Populated by setMarqueeText() in main.js — the number of repeats
+           has to scale with the footer's actual width (see there), so it
+           can't be hardcoded here. -->
+      <div class="marquee-track"></div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

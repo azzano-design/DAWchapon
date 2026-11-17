@@ -1,9 +1,26 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-import { getToy } from "../toyData.js";
+import { getToy, VARIANTS } from "../toyData.js";
 
-const KESHI_MODEL_URL = "/models/keshi.glb";
+// import.meta.env.BASE_URL is "/" by default (matching the plugin's own
+// resourceProvider, which treats itself as rooted at "/", and matching
+// plain `vite dev`/`vite build`) — but can be overridden at build time
+// with `vite build --base=./`, which is what the landing page's embedded
+// copy does, so this resolves relative to wherever that copy's own
+// index.html ends up being served from instead of assuming it's at the
+// site root.
+const KESHI_MODEL_URL = `${import.meta.env.BASE_URL}models/keshi.glb`;
+
+// Fixed finish colors for the rare pulls — the toy itself actually turns
+// this color (unlike the backlight pulse, which stays tinted to the toy's
+// own original color regardless of variant; see GachaponMachine). Kept on
+// the light side deliberately: at metalness 1 (see makeMetallicMaterial)
+// this color IS the specular reflectance, with no diffuse term to fall
+// back on, so a darker value here reads as a much darker toy under the
+// scene's dim lighting rather than just a duller tint.
+const SILVER_COLOR = 0xe8ebf2;
+const GOLD_COLOR = 0xf5d479;
 
 let keshiGeometry = null;
 let keshiLoadPromise = null;
@@ -74,16 +91,39 @@ function makeRubberMaterial(color) {
   });
 }
 
+// A polished metal finish for Silver/Gold pulls — high metalness and low
+// roughness (with the environment map doing most of the work to actually
+// sell it) rather than the matte rubber/vinyl look of a normal pull.
+function makeMetallicMaterial(color) {
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: 0.18,
+    metalness: 1,
+    clearcoat: 0.5,
+    clearcoatRoughness: 0.12,
+  });
+}
+
 // Every toy shares the one keshi geometry (same model for all of them, for
-// now) — only the material differs, tinted per-toy with the same color the
-// old placeholder shapes used.
-export function makeToyMesh(toyIndex) {
+// now) — only the material differs: normal pulls tint it per-toy with the
+// same color the old placeholder shapes used, while Silver/Gold pulls
+// override that with a shiny metallic finish in a fixed silver/gold color
+// instead (see SILVER_COLOR/GOLD_COLOR above).
+export function makeToyMesh(toyIndex, variant = VARIANTS.ORIGINAL) {
   if (!keshiGeometry) {
     throw new Error("makeToyMesh() called before preloadKeshiModel() resolved");
   }
 
-  const toy = getToy(toyIndex);
-  const mesh = new THREE.Mesh(keshiGeometry, makeRubberMaterial(toy.color));
+  let material;
+  if (variant === VARIANTS.GOLD) {
+    material = makeMetallicMaterial(GOLD_COLOR);
+  } else if (variant === VARIANTS.SILVER) {
+    material = makeMetallicMaterial(SILVER_COLOR);
+  } else {
+    material = makeRubberMaterial(getToy(toyIndex).color);
+  }
+
+  const mesh = new THREE.Mesh(keshiGeometry, material);
   mesh.castShadow = true;
   return mesh;
 }
