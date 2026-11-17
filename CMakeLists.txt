@@ -5,6 +5,15 @@ project(DAWchapon VERSION 0.1.0)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Strip the local checkout's absolute path (e.g. /Users/<you>/...) out of
+# debug info and __FILE__ so built binaries are identical and shareable
+# no matter which machine/user produced them.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    add_compile_options(
+        -ffile-prefix-map=${CMAKE_SOURCE_DIR}/=./
+        -ffile-prefix-map=${CMAKE_BINARY_DIR}/=./build/)
+endif()
+
 option(DAWCHAPON_USE_DEV_SERVER "Point the plugin's WebView at the local Vite dev server instead of embedded assets" ON)
 option(DAWCHAPON_TEST_MODE "Build with a developer overlay (Prev/Next buttons) for cycling through every toy+variant combo, bypassing the gacha pull flow" OFF)
 
