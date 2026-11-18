@@ -54,7 +54,7 @@ class ToyProcessor extends AudioWorkletProcessor {
 
       // --- Ring modulation, optionally LFO-swept (Zyxar's wobble; a
       // static carrier when carrierLfoHz/carrierSweepHz are 0, as in
-      // Robo-Pal) ---
+      // BroBot) ---
       let carrierSample = 0;
       if (ringModAmount > 0) {
         this._lfoPhase += (2 * Math.PI * carrierLfoHz) / sampleRate;
@@ -67,8 +67,8 @@ class ToyProcessor extends AudioWorkletProcessor {
         carrierSample = Math.sin(this._carrierPhase);
       }
 
-      // --- Sample-and-hold decimation + bit quantization (Robo-Pal /
-      // Lo-Fi Bot's crunchy crush) ---
+      // --- Sample-and-hold decimation + bit quantization (BroBot /
+      // Nostolgon's crunchy crush) ---
       const samplesPerHold = sampleRate / Math.max(1, sampleHoldHz);
       this._phaseAccumulator += 1;
       const takeNewHold = this._phaseAccumulator >= samplesPerHold;

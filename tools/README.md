@@ -2,7 +2,7 @@
 
 The live page (`../index.html`) switches between 6 plain audio files instead
 of processing audio live in the browser: `../assets/dawchapon-test.mp3`
-(dry/unprocessed) plus 5 pre-rendered effect versions in
+(dry/Original Sound) plus 5 pre-rendered effect versions in
 `../assets/stems/`, one per toy. Switching preserves the current playhead
 and play/pause state (see `swapTrack()` in `../js/main.js`).
 

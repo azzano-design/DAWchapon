@@ -59,7 +59,7 @@ public:
     // The toy half of the pick excludes both the currently active toy and
     // whichever one was active immediately before it (previousToyIndex),
     // so a short run never repeats a toy within a 2-pull window — e.g.
-    // Robo-Pal, Zyxar, Robo-Pal can no longer happen, only Robo-Pal, Zyxar,
+    // BroBot, Zyxar, BroBot can no longer happen, only BroBot, Zyxar,
     // (one of the other three). Variant is then picked independently and
     // weighted by rarity (see ToyRegistry::pickVariant), with no exclusion
     // of its own — the toy exclusion alone is enough to guarantee the new

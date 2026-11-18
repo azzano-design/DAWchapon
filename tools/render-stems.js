@@ -10,7 +10,7 @@
 // because this tool still needs it.
 
 const TOY_BUILDERS = [
-  // 0 Robo-Pal — ring-modulated, bit-crushed, bandpass-filtered telephone
+  // 0 BroBot — ring-modulated, bit-crushed, bandpass-filtered telephone
   // voice. Pure ring mod (no dry blend) + heavy crush + narrow bandpass.
   (ctx, workletNode) => {
     workletNode.parameters.get("carrierHz").value = 55;
@@ -58,7 +58,7 @@ const TOY_BUILDERS = [
     return { input: workletNode, output: mixBus };
   },
 
-  // 2 Crumble — bright pre-emphasis driven into a tanh waveshaper for warm,
+  // 2 DistorTRON — bright pre-emphasis driven into a tanh waveshaper for warm,
   // crunchy saturation. No ring-mod/crush needed, so the worklet is
   // bypassed entirely for this one.
   (ctx) => {
@@ -82,7 +82,7 @@ const TOY_BUILDERS = [
     return { input: preEmphasis, output: outputTrim, bypassWorklet: true };
   },
 
-  // 3 Echo Spirit — filtered feedback delay: repeats that darken as they
+  // 3 Howler — filtered feedback delay: repeats that darken as they
   // fade. The dry signal is summed back in inside the chain itself (as the
   // real DSP does).
   (ctx) => {
@@ -113,7 +113,7 @@ const TOY_BUILDERS = [
     return { input: inputGain, output: mixOut, bypassWorklet: true };
   },
 
-  // 4 Lo-Fi Bot — heavy sample-rate decimation + deep bit reduction, for a
+  // 4 Nostolgon — heavy sample-rate decimation + deep bit reduction, for a
   // flat, crunchy "old sampler" character. No ring mod, just crush.
   (ctx, workletNode) => {
     workletNode.parameters.get("carrierHz").value = 0;

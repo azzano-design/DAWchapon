@@ -16,7 +16,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const landingPageDir = path.resolve(__dirname, "..");
 const stemsDir = path.join(landingPageDir, "assets", "stems");
 
-const TOY_NAMES = ["robopal", "zyxar", "crumble", "echospirit", "lofibot"];
+const TOY_NAMES = ["brobot", "zyxar", "distortron", "howler", "nostolgon"];
 
 const MIME = {
   ".html": "text/html",

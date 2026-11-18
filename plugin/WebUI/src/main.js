@@ -2,7 +2,7 @@ import * as Juce from "@juce-framework/webview";
 
 import { GachaponMachine } from "./scene/GachaponMachine.js";
 import { ToyIcon } from "./scene/ToyIcon.js";
-import { preloadKeshiModel } from "./scene/toyMesh.js";
+import { preloadToyModels } from "./scene/toyMesh.js";
 import { getToy, TOYS, VARIANTS, pickVariant } from "./toyData.js";
 import { playChime, playRumble, startRattle, stopRattle, unlockAudio } from "./sound.js";
 
@@ -250,7 +250,7 @@ function pickNextStandaloneSpin() {
 }
 
 // TEST_MODE fallback: walks every toy+variant combo in a fixed order
-// (Robo-Pal/Original, Robo-Pal/Silver, Robo-Pal/Gold, Zyxar/Original, ...)
+// (BroBot/Original, BroBot/Silver, BroBot/Gold, Zyxar/Original, ...)
 // rather than picking at random, so a demo can show off the full set of
 // pulls — including the rare ones — without waiting on the odds.
 const TEST_MODE_VARIANT_ORDER = Object.values(VARIANTS);
@@ -270,7 +270,7 @@ function pickNextTestModeSpin() {
 // sync, host automation, reset), should ever be gated behind this load.
 // GachaponMachine.showSidebarToy() and ToyIcon.show() each await it
 // internally, right before they actually need the geometry.
-preloadKeshiModel();
+preloadToyModels();
 
 const machine = new GachaponMachine(document.getElementById("scene-container"), {
   onSpinRequested: () => {

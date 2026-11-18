@@ -488,11 +488,11 @@ pre code {
   width: 100%;
   max-width: 760px;
   margin: 0 auto 56px;
-  /* Matches assets/video/dawchapon-install.mp4's own 1780x926 — same slot
+  /* Matches assets/video/dawchapon-install.mov's own 1920x1080 — same slot
      the placeholder occupied, just sized to the real video's aspect
      instead of an arbitrary placeholder one, so nothing's cropped or
      letterboxed. */
-  aspect-ratio: 1780 / 926;
+  aspect-ratio: 1920 / 1080;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);

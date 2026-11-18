@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-import { getToy, VARIANTS } from "../toyData.js";
+import { getToy, TOYS, VARIANTS } from "../toyData.js";
 
 // import.meta.env.BASE_URL is "/" by default (matching the plugin's own
 // resourceProvider, which treats itself as rooted at "/", and matching
@@ -10,7 +10,7 @@ import { getToy, VARIANTS } from "../toyData.js";
 // copy does, so this resolves relative to wherever that copy's own
 // index.html ends up being served from instead of assuming it's at the
 // site root.
-const KESHI_MODEL_URL = `${import.meta.env.BASE_URL}models/keshi.glb`;
+const modelUrl = (filename) => `${import.meta.env.BASE_URL}models/${filename}`;
 
 // Fixed finish colors for the rare pulls — the toy itself actually turns
 // this color (unlike the backlight pulse, which stays tinted to the toy's
@@ -22,58 +22,67 @@ const KESHI_MODEL_URL = `${import.meta.env.BASE_URL}models/keshi.glb`;
 const SILVER_COLOR = 0xe8ebf2;
 const GOLD_COLOR = 0xf5d479;
 
-let keshiGeometry = null;
-let keshiLoadPromise = null;
+// Indexed by toy index, same order as TOYS — each toy's own normalized
+// geometry (centered on its own origin, scaled to NORMALIZED_HEIGHT tall),
+// once its model has loaded.
+const toyGeometries = [];
+let toyLoadPromise = null;
 
 // The old placeholder shapes (icosahedron/sphere radius 1, etc.) were all
 // roughly 2 units across — callers' own scale factors (the sidebar's 0.22,
-// ToyIcon's 0.85) were tuned against that. Normalizing the model to this
+// ToyIcon's 0.85) were tuned against that. Normalizing each model to this
 // same height keeps it reading at about the same size through those same
-// factors, rather than suddenly halving when the model's native units
-// turn out to be different from the shapes it's replacing.
+// factors, rather than suddenly halving when a model's native units turn
+// out to be different from the shapes it's replacing.
 const NORMALIZED_HEIGHT = 2;
 
-// Loads the one shared keshi.glb mesh and normalizes it in place (centered
-// on its own origin, scaled to NORMALIZED_HEIGHT tall) so every toy can
-// place and scale it the same way the old placeholder shapes were placed
-// and scaled. Call this once, early, and await it before anything calls
-// makeToyMesh() — that stays synchronous and assumes the geometry is
-// already here, since it's invoked from places (mid-animation, a tiny icon
-// viewport) that can't themselves await a load.
-export function preloadKeshiModel() {
-  if (!keshiLoadPromise) {
-    keshiLoadPromise = new GLTFLoader()
-      .loadAsync(KESHI_MODEL_URL)
-      .then((gltf) => {
-        let geometry = null;
-        gltf.scene.traverse((child) => {
-          if (child.isMesh && !geometry) geometry = child.geometry;
-        });
-        if (!geometry) throw new Error(`${KESHI_MODEL_URL} contains no mesh`);
+function loadToyGeometry(filename) {
+  const url = modelUrl(filename);
+  return new GLTFLoader().loadAsync(url).then((gltf) => {
+    let geometry = null;
+    gltf.scene.traverse((child) => {
+      if (child.isMesh && !geometry) geometry = child.geometry;
+    });
+    if (!geometry) throw new Error(`${url} contains no mesh`);
 
-        const box = new THREE.Box3().setFromBufferAttribute(geometry.attributes.position);
-        const size = new THREE.Vector3();
-        const center = new THREE.Vector3();
-        box.getSize(size);
-        box.getCenter(center);
-        geometry.translate(-center.x, -center.y, -center.z);
-        const scale = NORMALIZED_HEIGHT / size.y;
-        geometry.scale(scale, scale, scale);
+    const box = new THREE.Box3().setFromBufferAttribute(geometry.attributes.position);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    geometry.translate(-center.x, -center.y, -center.z);
+    const scale = NORMALIZED_HEIGHT / size.y;
+    geometry.scale(scale, scale, scale);
 
-        keshiGeometry = geometry;
-      })
-      .catch((error) => {
-        // Reset so a later call (e.g. the next time a toy needs showing)
-        // gets to retry instead of being stuck on this one rejection
-        // forever — every caller here only reacts to success (.then()),
-        // so without this, a failed load would otherwise just silently
-        // mean no toy ever appears again, with no obvious cause in the UI.
-        keshiLoadPromise = null;
-        console.error(`Failed to load toy model from ${KESHI_MODEL_URL}:`, error);
-        throw error;
-      });
+    return geometry;
+  });
+}
+
+// Loads every toy's own .glb model and normalizes it in place. Call this
+// once, early, and await it before anything calls makeToyMesh() — that
+// stays synchronous and assumes the geometries are already here, since
+// it's invoked from places (mid-animation, a tiny icon viewport) that
+// can't themselves await a load.
+export function preloadToyModels() {
+  if (!toyLoadPromise) {
+    toyLoadPromise = Promise.all(
+      TOYS.map((toy, index) =>
+        loadToyGeometry(toy.model).then((geometry) => {
+          toyGeometries[index] = geometry;
+        })
+      )
+    ).catch((error) => {
+      // Reset so a later call (e.g. the next time a toy needs showing)
+      // gets to retry instead of being stuck on this one rejection
+      // forever — every caller here only reacts to success (.then()),
+      // so without this, a failed load would otherwise just silently
+      // mean no toy ever appears again, with no obvious cause in the UI.
+      toyLoadPromise = null;
+      console.error("Failed to load toy models:", error);
+      throw error;
+    });
   }
-  return keshiLoadPromise;
+  return toyLoadPromise;
 }
 
 // A soft, semi-matte rubber/vinyl finish — classic for a keshi toy — rather
@@ -104,14 +113,15 @@ function makeMetallicMaterial(color) {
   });
 }
 
-// Every toy shares the one keshi geometry (same model for all of them, for
-// now) — only the material differs: normal pulls tint it per-toy with the
-// same color the old placeholder shapes used, while Silver/Gold pulls
-// override that with a shiny metallic finish in a fixed silver/gold color
-// instead (see SILVER_COLOR/GOLD_COLOR above).
+// Each toy renders its own model geometry — only the material differs:
+// normal pulls tint it per-toy with the same color the old placeholder
+// shapes used, while Silver/Gold pulls override that with a shiny metallic
+// finish in a fixed silver/gold color instead (see SILVER_COLOR/GOLD_COLOR
+// above).
 export function makeToyMesh(toyIndex, variant = VARIANTS.ORIGINAL) {
-  if (!keshiGeometry) {
-    throw new Error("makeToyMesh() called before preloadKeshiModel() resolved");
+  const geometry = toyGeometries[toyIndex];
+  if (!geometry) {
+    throw new Error("makeToyMesh() called before preloadToyModels() resolved");
   }
 
   let material;
@@ -123,7 +133,7 @@ export function makeToyMesh(toyIndex, variant = VARIANTS.ORIGINAL) {
     material = makeRubberMaterial(getToy(toyIndex).color);
   }
 
-  const mesh = new THREE.Mesh(keshiGeometry, material);
+  const mesh = new THREE.Mesh(geometry, material);
   mesh.castShadow = true;
   return mesh;
 }

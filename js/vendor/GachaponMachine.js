@@ -7,7 +7,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import GUI from "lil-gui";
 
 import { getToy, TOYS, VARIANTS } from "../toyData.js";
-import { makeToyMesh, preloadKeshiModel } from "./toyMesh.js";
+import { makeToyMesh, preloadToyModels } from "./toyMesh.js";
 
 // Machine proportions (world units), front panel centered on local X=0,
 // front face at Z = FRONT_Z. Modeled loosely on a classic capsule-vending
@@ -58,9 +58,11 @@ const SIDE_MACHINE_OFFSET = 2.4;
 // regardless of how wide either machine actually is. Keeps the toy clear
 // of both instead of sinking into the flanking machine's pedestal.
 const SIDEBAR_TOY_X = SIDE_MACHINE_OFFSET / 2;
-// 4x the original decorative-icon scale — it's meant to be a prominent,
-// spinnable showcase piece now, not a small side detail.
-const SIDEBAR_TOY_SCALE = 0.22 * 4;
+// 2x the original decorative-icon scale — it's meant to be a prominent,
+// spinnable showcase piece now, not a small side detail. (Was 4x before
+// the real per-toy models replaced the shared placeholder shape; halved
+// since the real models read as too large at that scale.)
+const SIDEBAR_TOY_SCALE = 0.22 * 2;
 // Pulled well forward of FRONT_Z/the pedestal's own front face (0.65) so
 // the now much bigger toy clears every machine's silhouette in depth,
 // even where its wider footprint overlaps one of them in X.
@@ -1110,12 +1112,12 @@ export class GachaponMachine {
     this.activeToyIndex = toyIndex;
     this.activeVariant = variant;
 
-    // The shared toy model may still be loading (main.js kicks that off
+    // This toy's model may still be loading (main.js kicks that off
     // but deliberately doesn't wait on it for anything else) — wait for
     // it here instead of assuming it's ready. By the time this resolves,
     // activeToyIndex may have moved on again (another reveal, a reset),
     // so only build the mesh if this call is still the current one.
-    preloadKeshiModel().then(() => {
+    preloadToyModels().then(() => {
       if (this._disposed || this.activeToyIndex !== toyIndex || this.activeVariant !== variant) return;
 
       const mesh = makeToyMesh(toyIndex, variant);

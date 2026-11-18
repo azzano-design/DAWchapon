@@ -4,18 +4,18 @@
 #include <functional>
 #include <memory>
 
-#include "CrumbleDsp.h"
-#include "CrumbleDspGold.h"
-#include "CrumbleDspSilver.h"
-#include "EchoSpiritDsp.h"
-#include "EchoSpiritDspGold.h"
-#include "EchoSpiritDspSilver.h"
-#include "LoFiBotDsp.h"
-#include "LoFiBotDspGold.h"
-#include "LoFiBotDspSilver.h"
-#include "RoboPalDsp.h"
-#include "RoboPalDspGold.h"
-#include "RoboPalDspSilver.h"
+#include "DistorTRONDsp.h"
+#include "DistorTRONDspGold.h"
+#include "DistorTRONDspSilver.h"
+#include "HowlerDsp.h"
+#include "HowlerDspGold.h"
+#include "HowlerDspSilver.h"
+#include "NostolgonDsp.h"
+#include "NostolgonDspGold.h"
+#include "NostolgonDspSilver.h"
+#include "BroBotDsp.h"
+#include "BroBotDspGold.h"
+#include "BroBotDspSilver.h"
 #include "ToyDspBase.h"
 #include "ZyxarDsp.h"
 #include "ZyxarDspGold.h"
@@ -54,26 +54,26 @@ namespace ToyRegistry
     inline const std::array<ToyInfo, numToys>& getToys()
     {
         static const std::array<ToyInfo, numToys> toys {
-            ToyInfo { 0, "Robo-Pal",
-                [] { return std::make_unique<RoboPalDsp>(); },
-                [] { return std::make_unique<RoboPalDspSilver>(); },
-                [] { return std::make_unique<RoboPalDspGold>(); } },
+            ToyInfo { 0, "BroBot",
+                [] { return std::make_unique<BroBotDsp>(); },
+                [] { return std::make_unique<BroBotDspSilver>(); },
+                [] { return std::make_unique<BroBotDspGold>(); } },
             ToyInfo { 1, "Zyxar",
                 [] { return std::make_unique<ZyxarDsp>(); },
                 [] { return std::make_unique<ZyxarDspSilver>(); },
                 [] { return std::make_unique<ZyxarDspGold>(); } },
-            ToyInfo { 2, "Crumble",
-                [] { return std::make_unique<CrumbleDsp>(); },
-                [] { return std::make_unique<CrumbleDspSilver>(); },
-                [] { return std::make_unique<CrumbleDspGold>(); } },
-            ToyInfo { 3, "Echo Spirit",
-                [] { return std::make_unique<EchoSpiritDsp>(); },
-                [] { return std::make_unique<EchoSpiritDspSilver>(); },
-                [] { return std::make_unique<EchoSpiritDspGold>(); } },
-            ToyInfo { 4, "Lo-Fi Bot",
-                [] { return std::make_unique<LoFiBotDsp>(); },
-                [] { return std::make_unique<LoFiBotDspSilver>(); },
-                [] { return std::make_unique<LoFiBotDspGold>(); } },
+            ToyInfo { 2, "DistorTRON",
+                [] { return std::make_unique<DistorTRONDsp>(); },
+                [] { return std::make_unique<DistorTRONDspSilver>(); },
+                [] { return std::make_unique<DistorTRONDspGold>(); } },
+            ToyInfo { 3, "Howler",
+                [] { return std::make_unique<HowlerDsp>(); },
+                [] { return std::make_unique<HowlerDspSilver>(); },
+                [] { return std::make_unique<HowlerDspGold>(); } },
+            ToyInfo { 4, "Nostolgon",
+                [] { return std::make_unique<NostolgonDsp>(); },
+                [] { return std::make_unique<NostolgonDspSilver>(); },
+                [] { return std::make_unique<NostolgonDspGold>(); } },
         };
         return toys;
     }

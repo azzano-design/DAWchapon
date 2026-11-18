@@ -27,7 +27,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(JUCE)
 
 juce_add_plugin(DAWchapon
-    COMPANY_NAME "Brendan Azzano"
+    COMPANY_NAME "Azzano Design"
     BUNDLE_ID "com.azzano-design.dawchapon"
     PLUGIN_MANUFACTURER_CODE Bazz
     PLUGIN_CODE Dwt1
@@ -43,21 +43,21 @@ juce_add_plugin(DAWchapon
 target_sources(DAWchapon PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
-    Source/Toys/RoboPalDsp.cpp
-    Source/Toys/RoboPalDspSilver.cpp
-    Source/Toys/RoboPalDspGold.cpp
+    Source/Toys/BroBotDsp.cpp
+    Source/Toys/BroBotDspSilver.cpp
+    Source/Toys/BroBotDspGold.cpp
     Source/Toys/ZyxarDsp.cpp
     Source/Toys/ZyxarDspSilver.cpp
     Source/Toys/ZyxarDspGold.cpp
-    Source/Toys/CrumbleDsp.cpp
-    Source/Toys/CrumbleDspSilver.cpp
-    Source/Toys/CrumbleDspGold.cpp
-    Source/Toys/EchoSpiritDsp.cpp
-    Source/Toys/EchoSpiritDspSilver.cpp
-    Source/Toys/EchoSpiritDspGold.cpp
-    Source/Toys/LoFiBotDsp.cpp
-    Source/Toys/LoFiBotDspSilver.cpp
-    Source/Toys/LoFiBotDspGold.cpp)
+    Source/Toys/DistorTRONDsp.cpp
+    Source/Toys/DistorTRONDspSilver.cpp
+    Source/Toys/DistorTRONDspGold.cpp
+    Source/Toys/HowlerDsp.cpp
+    Source/Toys/HowlerDspSilver.cpp
+    Source/Toys/HowlerDspGold.cpp
+    Source/Toys/NostolgonDsp.cpp
+    Source/Toys/NostolgonDspSilver.cpp
+    Source/Toys/NostolgonDspGold.cpp)
 
 target_compile_definitions(DAWchapon PRIVATE
     JUCE_WEB_BROWSER=1

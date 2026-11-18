@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
-import { makeToyMesh, preloadKeshiModel } from "./toyMesh.js";
+import { makeToyMesh, preloadToyModels } from "./toyMesh.js";
 import { VARIANTS } from "../toyData.js";
 
 // A tiny self-contained Three.js viewport that renders just one toy mesh,
@@ -62,12 +62,12 @@ export class ToyIcon {
   show(toyIndex, variant = VARIANTS.ORIGINAL) {
     this.clear();
 
-    // The shared toy model may still be loading — wait for it instead of
+    // This toy's model may still be loading — wait for it instead of
     // assuming it's ready. A later show() or clear() bumps
     // _showRequestId, so if that's happened by the time this resolves,
     // this call is stale and should do nothing.
     const requestId = ++this._showRequestId;
-    preloadKeshiModel().then(() => {
+    preloadToyModels().then(() => {
       if (this._disposed || requestId !== this._showRequestId) return;
 
       this.mesh = makeToyMesh(toyIndex, variant);

@@ -4,21 +4,21 @@ target_sources(DAWchaponTests PRIVATE
     PluginBasicTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Source/PluginProcessor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Source/PluginEditor.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/RoboPalDsp.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/RoboPalDspSilver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/RoboPalDspGold.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/BroBotDsp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/BroBotDspSilver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/BroBotDspGold.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/ZyxarDsp.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/ZyxarDspSilver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/ZyxarDspGold.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/CrumbleDsp.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/CrumbleDspSilver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/CrumbleDspGold.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/EchoSpiritDsp.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/EchoSpiritDspSilver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/EchoSpiritDspGold.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/LoFiBotDsp.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/LoFiBotDspSilver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/LoFiBotDspGold.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/DistorTRONDsp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/DistorTRONDspSilver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/DistorTRONDspGold.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/HowlerDsp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/HowlerDspSilver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/HowlerDspGold.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/NostolgonDsp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/NostolgonDspSilver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source/Toys/NostolgonDspGold.cpp)
 
 target_include_directories(DAWchaponTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 

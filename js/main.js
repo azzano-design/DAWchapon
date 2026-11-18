@@ -3,7 +3,7 @@
 // header comment for the full reasoning.
 import { GachaponMachine } from "./vendor/GachaponMachine.js";
 import { ToyIcon } from "./vendor/ToyIcon.js";
-import { preloadKeshiModel } from "./vendor/toyMesh.js";
+import { preloadToyModels } from "./vendor/toyMesh.js";
 import { playChime, playRumble, startRattle, stopRattle, unlockAudio } from "./vendor/sound.js";
 import { TOYS, VARIANTS, pickVariant } from "./toyData.js";
 
@@ -12,7 +12,7 @@ import { TOYS, VARIANTS, pickVariant } from "./toyData.js";
 // plugin/Source/Toys/*Dsp.cpp.
 const TOY_COPY = [
   {
-    name: "Robo-Pal",
+    name: "BroBot",
     color: "#8a94a6",
     tagline: "Turns your sound robotic",
     description:
@@ -26,25 +26,25 @@ const TOY_COPY = [
       "A slow LFO sweeps a ring-modulated warble into a wobbling “alien transmission” tone, layered over a wide-detuned two-oscillator pad for a shimmering ambient bed underneath.",
   },
   {
-    name: "Crumble",
+    name: "DistorTRON",
     color: "#d97757",
     tagline: "Crunchy distortion grit",
     description:
       "Bright high-shelf pre-emphasis drives straight into a tanh waveshaper for warm, saturated overdrive — crunchy without losing the low end.",
   },
   {
-    name: "Echo Spirit",
+    name: "Howler",
     color: "#c3b6f2",
     tagline: "Haunting filtered echoes",
     description:
       "A filtered-feedback slap delay whose repeats darken as they fade — each echo a little duller than the last, like it's trailing off into another room.",
   },
   {
-    name: "Lo-Fi Bot",
+    name: "Nostolgon",
     color: "#f2d06e",
     tagline: "Heavy lo-fi bitcrush",
     description:
-      "Heavy sample-rate decimation and deep bit reduction for a flat, crunchy “old sampler” character — distinct from Robo-Pal's more resonant, formant-y voice.",
+      "Heavy sample-rate decimation and deep bit reduction for a flat, crunchy “old sampler” character — distinct from BroBot's more resonant, formant-y voice.",
   },
 ];
 
@@ -53,18 +53,18 @@ const RARES = [
   { label: "Silver", odds: "12% of pulls", variant: VARIANTS.SILVER, description: "Brighter and tighter — a higher carrier pitch and a narrower, more resonant filter." },
   { label: "Gold", odds: "3% of pulls", variant: VARIANTS.GOLD, description: "Deep and growly — the lowest carrier pitch and the heaviest crush of the three. The rarest finish." },
 ];
-const ROBO_PAL_INDEX = 0;
+const BROBOT_INDEX = 0;
 
 // --- Pre-rendered stems (see tools/README.md) — switching tracks preserves
 // the playhead and play/pause state instead of processing audio live, so
 // there's no AudioContext/AudioWorklet involved for the music at all. ---
 const DRY_TRACK_PATH = "assets/dawchapon-test.mp3";
 const STEM_PATHS = [
-  "assets/stems/robopal.mp3",
+  "assets/stems/brobot.mp3",
   "assets/stems/zyxar.mp3",
-  "assets/stems/crumble.mp3",
-  "assets/stems/echospirit.mp3",
-  "assets/stems/lofibot.mp3",
+  "assets/stems/distortron.mp3",
+  "assets/stems/howler.mp3",
+  "assets/stems/nostolgon.mp3",
 ];
 
 const audio = document.getElementById("demo-audio");
@@ -148,7 +148,7 @@ function updateNowPlayingLabel() {
   nowPlayingLabel.textContent =
     pluginIsOn && activeToyIndex !== null
       ? `Now playing through: ${TOY_COPY[activeToyIndex].name}${variantSuffix(activeVariant)}`
-      : "Now playing: unprocessed";
+      : "Now playing: Original Sound";
 }
 
 function highlightActiveCard() {
@@ -194,14 +194,14 @@ function renderRareGrid() {
     rareGrid.appendChild(card);
 
     const icon = new ToyIcon(card.querySelector(".rare-card-icon"));
-    icon.show(ROBO_PAL_INDEX, rare.variant);
+    icon.show(BROBOT_INDEX, rare.variant);
   });
 }
 
 // --- The real gachapon machine, inlined (see js/vendor/GachaponMachine.js)
 // — no iframe, no postMessage. Turning the knob drives everything below
 // directly through these callbacks. ---
-preloadKeshiModel();
+preloadToyModels();
 
 const machine = new GachaponMachine(
   document.getElementById("scene-container"),

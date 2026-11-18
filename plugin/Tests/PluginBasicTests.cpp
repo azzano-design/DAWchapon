@@ -239,7 +239,7 @@ public:
             processor.confirmPendingSpin();
 
             // Keep checking for a while (not just one block) — some toys
-            // (e.g. Echo Spirit's ~180ms delay line) need more than one
+            // (e.g. Howler's ~180ms delay line) need more than one
             // block before their effect on a constant input is visible.
             bool changedSomewhere = false;
             const int blocksToCheck = (int) std::ceil (sampleRate / (double) blockSize) + 5;
